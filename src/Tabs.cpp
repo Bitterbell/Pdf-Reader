@@ -26,6 +26,8 @@
 #include "TableOfContents.h"
 #include "Tabs.h"
 
+#include "DebugLog.h"
+
 static void SwapTabs(WindowInfo *win, int tab1, int tab2);
 
 #define DEFAULT_CURRENT_BG_COL (COLORREF)-1
@@ -68,7 +70,7 @@ class TabPainter
     HWND hwnd;
 public:
     int current, highlighted, xClicked, xHighlighted;
-    bool isMouseInClientArea, isDragging;
+    bool isMouseInClientArea;
     LPARAM mouseCoordinates;
     int nextTab;
     bool inTitlebar;
@@ -80,7 +82,7 @@ public:
     TabPainter(HWND wnd, SizeI tabSize) :
         hwnd(wnd), data(nullptr), width(0), height(0),
         current(-1), highlighted(-1), xClicked(-1), xHighlighted(-1), nextTab(-1),
-        isMouseInClientArea(false), isDragging(false), inTitlebar(false), currBgCol(DEFAULT_CURRENT_BG_COL) {
+        isMouseInClientArea(false), inTitlebar(false), currBgCol(DEFAULT_CURRENT_BG_COL) {
         memset(&color, 0, sizeof(color));
         Reshape(tabSize.dx, tabSize.dy);
         EvaluateColors(false);
@@ -390,6 +392,10 @@ static void TabNotification(WindowInfo *win, UINT code, int idx1, int idx2) {
     }
 }
 
+static bool IsDragging(HWND hwnd) {
+    return hwnd == GetCapture();
+}
+
 static WNDPROC DefWndProcTabBar = nullptr;
 static LRESULT CALLBACK WndProcTabBar(HWND hwnd, UINT msg, WPARAM wParam, LPARAM lParam)
 {
@@ -497,8 +503,11 @@ static LRESULT CALLBACK WndProcTabBar(HWND hwnd, UINT msg, WPARAM wParam, LPARAM
 
     case WM_MOUSEMOVE:
         {
-            tab->mouseCoordinates = lParam;
+            int x = GET_X_LPARAM(lParam);
+            int y = GET_Y_LPARAM(lParam);
+            bool isDragging = IsDragging(hwnd);
 
+            tab->mouseCoordinates = lParam;
             if (!tab->isMouseInClientArea) {
                 // Track the mouse for leaving the client area.
                 TRACKMOUSEEVENT tme = { 0 };
@@ -512,24 +521,25 @@ static LRESULT CALLBACK WndProcTabBar(HWND hwnd, UINT msg, WPARAM wParam, LPARAM
                 tab->isMouseInClientArea = false;
 
             bool inX = false;
-            int hl = wParam == 0xFF ? -1 : tab->IndexFromPoint(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam), &inX);
-            if (tab->isDragging && hl == -1) {
+            int hl = wParam == 0xFF ? -1 : tab->IndexFromPoint(x, y, &inX);
+            if (isDragging && hl == -1) {
                 // preserve the highlighted tab if it's dragged outside the tabs' area
                 hl = tab->highlighted;
             }
             if (tab->highlighted != hl) {
-                if (tab->isDragging) {
+                if (isDragging) {
                     // send notification if the highlighted tab is dragged over another
                     WindowInfo *win = FindWindowInfoByHwnd(hwnd);
                     int tabNo = tab->highlighted;
                     uitask::Post([=] { TabNotification(win, T_DRAG, tabNo, hl); });
+                    plogf("sending T_DRAG, tabNo=%d, hl=%d", (int) tabNo, (int) hl);
                 }
 
                 tab->Invalidate(hl);
                 tab->Invalidate(tab->highlighted);
                 tab->highlighted = hl;
             }
-            int xHl = inX && !tab->isDragging ? hl : -1;
+            int xHl = inX && !isDragging ? hl : -1;
             if (tab->xHighlighted != xHl) {
                 tab->Invalidate(xHl);
                 tab->Invalidate(tab->xHighlighted);
@@ -537,30 +547,38 @@ static LRESULT CALLBACK WndProcTabBar(HWND hwnd, UINT msg, WPARAM wParam, LPARAM
             }
             if (!inX)
                 tab->xClicked = -1;
-        }
+            plogf("tab WM_MOUSEMOVE %d %d, isDrag=%d, inClient=%d, inX=%d", x, y, (int)isDragging, (int)tab->isMouseInClientArea, (int)inX);
+
+    }
         return 0;
 
     case WM_LBUTTONDOWN:
-        bool inX;
-        tab->nextTab = tab->IndexFromPoint(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam), &inX);
-        if (inX) {
+        bool overClose;
+        tab->nextTab = tab->IndexFromPoint(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam), &overClose);
+        if (tab->nextTab == -1) {
+            return 0;
+        }
+        if (overClose) {
             // send request to close the tab
             WindowInfo *win = FindWindowInfoByHwnd(hwnd);
             int next = tab->nextTab;
             uitask::Post([=] { TabNotification(win, T_CLOSING, next, -1); });
+            return 0;
         }
-        else if (tab->nextTab != -1) {
-            if (tab->nextTab != tab->current) {
-                // send request to select tab
-                WindowInfo *win = FindWindowInfoByHwnd(hwnd);
-                uitask::Post([=] { TabNotification(win, TCN_SELCHANGING, -1, -1); });
-            }
-            tab->isDragging = true;
-            SetCapture(hwnd);
+
+        if (tab->nextTab != tab->current) {
+            // send request to select tab
+            WindowInfo *win = FindWindowInfoByHwnd(hwnd);
+            uitask::Post([=] { TabNotification(win, TCN_SELCHANGING, -1, -1); });
         }
+        SetCapture(hwnd);
         return 0;
 
     case WM_LBUTTONUP:
+    {
+        bool isDragging = IsDragging(hwnd);
+        int x = GET_X_LPARAM(lParam);
+        int y = GET_Y_LPARAM(lParam);
         if (tab->xClicked != -1) {
             // send notification that the tab is closed
             WindowInfo *win = FindWindowInfoByHwnd(hwnd);
@@ -569,11 +587,12 @@ static LRESULT CALLBACK WndProcTabBar(HWND hwnd, UINT msg, WPARAM wParam, LPARAM
             tab->Invalidate(clicked);
             tab->xClicked = -1;
         }
-        if (tab->isDragging) {
-            tab->isDragging = false;
+        plogf("WM_LBUTTONUP %d %d isDrag=%d", x, y, (int) isDragging);
+        if (isDragging) {
             ReleaseCapture();
         }
         return 0;
+    }
 
     case WM_MBUTTONDOWN:
         // middle-clicking unconditionally closes the tab
