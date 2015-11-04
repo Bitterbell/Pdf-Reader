@@ -28,8 +28,6 @@
 
 #include "DebugLog.h"
 
-static void SwapTabs(WindowInfo *win, int tab1, int tab2);
-
 #define DEFAULT_CURRENT_BG_COL (COLORREF)-1
 
 #define TAB_COLOR_BG      COLOR_BTNFACE
@@ -795,6 +793,22 @@ static void RemoveTab(WindowInfo *win, int idx)
     UpdateTabWidth(win);
 }
 
+static void SwapTabs(WindowInfo *win, int tab1, int tab2) {
+    if (tab1 == tab2 || tab1 < 0 || tab2 < 0)
+        return;
+
+    std::swap(win->tabs.At(tab1), win->tabs.At(tab2));
+    SetTabTitle(win, win->tabs.At(tab1));
+    SetTabTitle(win, win->tabs.At(tab2));
+
+    int current = TabCtrl_GetCurSel(win->hwndTabBar);
+    if (tab1 == current)
+        TabCtrl_SetCurSel(win->hwndTabBar, tab2);
+    else if (tab2 == current)
+        TabCtrl_SetCurSel(win->hwndTabBar, tab1);
+}
+
+
 // Called when we're closing a document
 void TabsOnCloseDoc(WindowInfo *win)
 {
@@ -940,22 +954,6 @@ void TabsOnCtrlTab(WindowInfo *win, bool reverse)
 
     int next = (TabCtrl_GetCurSel(win->hwndTabBar) + (reverse ? -1 : 1) + count) % count;
     TabsSelect(win, next);
-}
-
-static void SwapTabs(WindowInfo *win, int tab1, int tab2)
-{
-    if (tab1 == tab2 || tab1 < 0 || tab2 < 0)
-        return;
-
-    std::swap(win->tabs.At(tab1), win->tabs.At(tab2));
-    SetTabTitle(win, win->tabs.At(tab1));
-    SetTabTitle(win, win->tabs.At(tab2));
-
-    int current = TabCtrl_GetCurSel(win->hwndTabBar);
-    if (tab1 == current)
-        TabCtrl_SetCurSel(win->hwndTabBar, tab2);
-    else if (tab2 == current)
-        TabCtrl_SetCurSel(win->hwndTabBar, tab1);
 }
 
 // Adjusts lightness by 1/255 units.
