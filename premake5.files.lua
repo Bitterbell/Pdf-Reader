@@ -387,6 +387,7 @@ function sumatra_files()
     "CrashHandler.*",
     "DisplayModel.*",
     "Doc.*",
+    "DragDrop.*",
     "EbookController.*",
     "EbookControls.*",
     "ExternalViewers.*",

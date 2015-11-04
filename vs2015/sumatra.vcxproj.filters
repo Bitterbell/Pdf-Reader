@@ -15,6 +15,7 @@
     <ClInclude Include="..\src\CrashHandler.h" />
     <ClInclude Include="..\src\DisplayModel.h" />
     <ClInclude Include="..\src\Doc.h" />
+    <ClInclude Include="..\src\DragDrop.h" />
     <ClInclude Include="..\src\EbookController.h" />
     <ClInclude Include="..\src\EbookControls.h" />
     <ClInclude Include="..\src\ExternalViewers.h" />
@@ -57,6 +58,7 @@
     <ClCompile Include="..\src\CrashHandler.cpp" />
     <ClCompile Include="..\src\DisplayModel.cpp" />
     <ClCompile Include="..\src\Doc.cpp" />
+    <ClCompile Include="..\src\DragDrop.cpp" />
     <ClCompile Include="..\src\EbookController.cpp" />
     <ClCompile Include="..\src\EbookControls.cpp" />
     <ClCompile Include="..\src\ExternalViewers.cpp" />
