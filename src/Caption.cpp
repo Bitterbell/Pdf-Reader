@@ -79,35 +79,57 @@ void CaptionInfo::UpdateTheme()
         theme = theme::OpenThemeData(hwnd, L"WINDOW");
 }
 
+static bool GetThemeBgCol(HTHEME hTheme, bool activeWindow, COLORREF* col) {
+    if (!hTheme) {
+        return false;
+    }
+    int propId = activeWindow ? TMT_FILLCOLORHINT : TMT_BORDERCOLORHINT;
+    return SUCCEEDED(theme::GetThemeColor(hTheme, WP_CAPTION, 0, propId, col));
+}
+
+static COLORREF GetSysBgCol(bool activeWindow) {
+    int colIdx = activeWindow ? COLOR_GRADIENTACTIVECAPTION : COLOR_GRADIENTINACTIVECAPTION;
+    return GetSysColor(colIdx);
+}
+
+static bool GetThemeTextCol(HTHEME hTheme, bool activeWindow, COLORREF* col) {
+    if (!hTheme) {
+        return false;
+    }
+    int propId = activeWindow || dwm::IsCompositionEnabled() ? TMT_CAPTIONTEXT : TMT_INACTIVECAPTIONTEXT;
+    return SUCCEEDED(theme::GetThemeColor(hTheme, WP_CAPTION, 0, propId, col));
+}
+
+static COLORREF GetSysTextCol(bool activeWindow) {
+    int colIdx = activeWindow || dwm::IsCompositionEnabled() ? COLOR_CAPTIONTEXT : COLOR_INACTIVECAPTIONTEXT;
+    return GetSysColor(colIdx);
+}
+
 void CaptionInfo::UpdateColors(bool activeWindow)
 {
     ARGB colorizationColor;
-    if (dwm::IsCompositionEnabled() &&
+    BYTE a, r, g, b, white;
+    if (false && dwm::IsCompositionEnabled() &&
         // get the color from the Registry and blend it with white background
         ReadRegDWORD(HKEY_CURRENT_USER, REG_DWM, L"ColorizationColor", colorizationColor)) {
-            BYTE A, R, G, B, white;
-            A = BYTE((colorizationColor >> 24) & 0xff);
+            a = BYTE((colorizationColor >> 24) & 0xff);
             if (!activeWindow)
-                A = (BYTE)floor(A / ACTIVE_INACTIVE_ALPHA_RATIO + 0.5f);
-            R = BYTE((colorizationColor >> 16) & 0xff);
-            G = BYTE((colorizationColor >> 8) & 0xff);
-            B = BYTE(colorizationColor & 0xff);
-            white = BYTE(255 - A);
-            float factor = A / 255.0f;
-            R = BYTE((int)floor(R * factor + 0.5f) + white);
-            G = BYTE((int)floor(G * factor + 0.5f) + white);
-            B = BYTE((int)floor(B * factor + 0.5f) + white);
-            bgColor = RGB(R, G, B);
+                a = (BYTE)floor(a / ACTIVE_INACTIVE_ALPHA_RATIO + 0.5f);
+            r = BYTE((colorizationColor >> 16) & 0xff);
+            g = BYTE((colorizationColor >> 8) & 0xff);
+            b = BYTE(colorizationColor & 0xff);
+            white = BYTE(255 - a);
+            float factor = a / 255.0f;
+            r = BYTE((int)floor(r * factor + 0.5f) + white);
+            g = BYTE((int)floor(g * factor + 0.5f) + white);
+            b = BYTE((int)floor(b * factor + 0.5f) + white);
+            bgColor = RGB(r, g, b);
     }
-    else if (!theme || !SUCCEEDED(theme::GetThemeColor(theme, WP_CAPTION, 0,
-        activeWindow ? TMT_FILLCOLORHINT : TMT_BORDERCOLORHINT, &bgColor))) {
-            bgColor = activeWindow ? GetSysColor(COLOR_GRADIENTACTIVECAPTION)
-                                   : GetSysColor(COLOR_GRADIENTINACTIVECAPTION);
+    else if (!GetThemeBgCol(theme, activeWindow, &bgColor)) {
+        bgColor = GetSysBgCol(activeWindow);
     }
-    if (!theme || !SUCCEEDED(theme::GetThemeColor(theme, WP_CAPTION, 0,
-        (activeWindow || dwm::IsCompositionEnabled()) ? TMT_CAPTIONTEXT : TMT_INACTIVECAPTIONTEXT, &textColor))) {
-            textColor = (activeWindow || dwm::IsCompositionEnabled()) ? GetSysColor(COLOR_CAPTIONTEXT)
-                                                                      : GetSysColor(COLOR_INACTIVECAPTIONTEXT);
+    if (!GetThemeTextCol(theme, activeWindow, &textColor)) {
+        textColor = GetSysTextCol(activeWindow);
     }
 }
 
