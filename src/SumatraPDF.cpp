@@ -2618,6 +2618,33 @@ static UINT_PTR CALLBACK FileOpenHook(HWND hDlg, UINT uiMsg, WPARAM wParam, LPAR
 }
 #endif
 
+// open a new empty window with the same size as window originating the command.
+// offset the position a little bit so that they don't overlap
+void OnMenuNewWindow(WindowInfo *winStart)
+{
+    if (gPluginMode || !HasPermission(Perm_DiskAccess))
+        return;
+    auto win = CreateWindowInfo();
+    if (win == nullptr)
+        return;
+
+    RECT r;
+    if (winStart != nullptr) {
+        GetWindowRect(winStart->hwndFrame, &r);
+    } else {
+        GetWindowRect(win->hwndFrame, &r);
+    }
+    HWND hwnd = win->hwndFrame;
+    RectMove(r, DpiScaleX(hwnd, 10), DpiScaleY(hwnd, 10));
+    SetWindowPos(hwnd, nullptr, RectX(r), RectY(r), RectDx(r), RectDy(r), SWP_NOSIZE | SWP_NOZORDER);
+
+    ShowWindow(win->hwndFrame, SW_SHOW);
+    UpdateWindow(win->hwndFrame);
+
+    SetSidebarVisibility(win, false, gGlobalPrefs->showFavorites);
+    ToolbarUpdateStateForWindow(win, true);
+}
+
 void OnMenuOpen(WindowInfo& win)
 {
     if (!HasPermission(Perm_DiskAccess)) return;
@@ -3758,6 +3785,10 @@ static LRESULT FrameOnCommand(WindowInfo *win, HWND hwnd, UINT msg, WPARAM wPara
     // most of them require a win, the few exceptions are no-ops
     switch (wmId)
     {
+        case IDM_NEW_WINDOW:
+            OnMenuNewWindow(win);
+            break;
+
         case IDM_OPEN:
         case IDT_FILE_OPEN:
             OnMenuOpen(*win);
