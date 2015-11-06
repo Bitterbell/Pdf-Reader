@@ -70,10 +70,28 @@ static inline Color ToColor(COLORREF c)
     return Color(GetRValueSafe(c), GetGValueSafe(c), GetBValueSafe(c));
 }
 
+enum class DragState {
+    None,
+    OverOriginalTabControl,
+    OverNewTabControl,
+    Detached,
+};
+
+struct DragInfo {
+    WindowInfo *winStart;
+    DragState state;
+    int origTabIdx;
+
+    DragInfo();
+};
+
+DragInfo::DragInfo() : winStart(nullptr), state(DragState::None), origTabIdx(-1) {
+}
+
 class TabsControl
 {
     WStrVec tabTitles;
-    PathData *data;
+    PathData *path;
     int width, height;
 public:
     HWND hwnd;
@@ -86,7 +104,7 @@ public:
     } colors;
 
     TabsControl(HWND wnd, SizeI tabSize) :
-        hwnd(wnd), data(nullptr), width(0), height(0),
+        hwnd(wnd), path(nullptr), width(0), height(0),
         current(-1), highlighted(-1), nextTab(-1),
         inTitlebar(false), currBgCol(DEFAULT_CURRENT_BG_COL) {
         ZeroMemory(&colors, sizeof(colors));
@@ -95,7 +113,7 @@ public:
     }
 
     ~TabsControl() {
-        delete data;
+        delete path;
         DeleteAll();
     }
 
@@ -171,9 +189,9 @@ bool TabsControl::Reshape(int dx, int dy) {
     shape.AddLine(p.X + c - o, p.Y + o, p.X + o, p.Y + c - o);
     shape.SetMarker();
 
-    delete data;
-    data = new PathData();
-    shape.GetPathData(data);
+    delete path;
+    path = new PathData();
+    shape.GetPathData(path);
     return true;
 }
 
@@ -181,7 +199,7 @@ bool TabsControl::Reshape(int dx, int dy) {
 int TabsControl::IndexFromPoint(int x, int y, bool *overClose) {
     Point point(x, y);
     Graphics gfx(hwnd);
-    GraphicsPath shapes(data->Points, data->Types, data->Count);
+    GraphicsPath shapes(path->Points, path->Types, path->Count);
     GraphicsPath shape;
     GraphicsPathIterator iter(&shapes);
     iter.NextMarker(&shape);
@@ -210,7 +228,7 @@ void TabsControl::Invalidate(int tabIdx) {
     if (tabIdx < 0) return;
 
     Graphics gfx(hwnd);
-    GraphicsPath shapes(data->Points, data->Types, data->Count);
+    GraphicsPath shapes(path->Points, path->Types, path->Count);
     GraphicsPath shape;
     GraphicsPathIterator iter(&shapes);
     iter.NextMarker(&shape);
@@ -255,7 +273,7 @@ void TabsControl::Paint(HDC hdc, RECT &rc) {
     gfx.SetSmoothingMode(SmoothingModeHighQuality);
     gfx.SetTextRenderingHint(TextRenderingHintClearTypeGridFit);
     gfx.SetPageUnit(UnitPixel);
-    GraphicsPath shapes(data->Points, data->Types, data->Count);
+    GraphicsPath shapes(path->Points, path->Types, path->Count);
     GraphicsPath shape;
     GraphicsPathIterator iter(&shapes);
 
