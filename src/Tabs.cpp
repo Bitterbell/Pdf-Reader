@@ -70,7 +70,7 @@ static inline Color ToColor(COLORREF c)
     return Color(GetRValueSafe(c), GetGValueSafe(c), GetBValueSafe(c));
 }
 
-class TabPainter
+class TabsControl
 {
     WStrVec tabTitles;
     PathData *data;
@@ -85,7 +85,7 @@ public:
         COLORREF bg, highlight, current, outline, bar, text, closeHighlight, closeClick, closeLine;
     } colors;
 
-    TabPainter(HWND wnd, SizeI tabSize) :
+    TabsControl(HWND wnd, SizeI tabSize) :
         hwnd(wnd), data(nullptr), width(0), height(0),
         current(-1), highlighted(-1), nextTab(-1),
         inTitlebar(false), currBgCol(DEFAULT_CURRENT_BG_COL) {
@@ -94,7 +94,7 @@ public:
         EvaluateColors(false);
     }
 
-    ~TabPainter() {
+    ~TabsControl() {
         delete data;
         DeleteAll();
     }
@@ -140,7 +140,7 @@ public:
 
 // Calculates tab's elements, based on its width and height.
 // Generates a GraphicsPath, which is used for painting the tab, etc.
-bool TabPainter::Reshape(int dx, int dy) {
+bool TabsControl::Reshape(int dx, int dy) {
     dx--;
     if (width == dx && height == dy)
         return false;
@@ -178,27 +178,27 @@ bool TabPainter::Reshape(int dx, int dy) {
 }
 
 // Finds the index of the tab, which contains the given point.
-int TabPainter::IndexFromPoint(int x, int y, bool *overClose) {
+int TabsControl::IndexFromPoint(int x, int y, bool *overClose) {
     Point point(x, y);
-    Graphics graphics(hwnd);
+    Graphics gfx(hwnd);
     GraphicsPath shapes(data->Points, data->Types, data->Count);
     GraphicsPath shape;
-    GraphicsPathIterator iterator(&shapes);
-    iterator.NextMarker(&shape);
+    GraphicsPathIterator iter(&shapes);
+    iter.NextMarker(&shape);
 
     ClientRect rClient(hwnd);
     REAL yPosTab = inTitlebar ? 0.0f : REAL(rClient.dy - height - 1);
-    graphics.TranslateTransform(1.0f, yPosTab);
+    gfx.TranslateTransform(1.0f, yPosTab);
     for (int i = 0; i < Count(); i++) {
         Point pt(point);
-        graphics.TransformPoints(CoordinateSpaceWorld, CoordinateSpaceDevice, &pt, 1);
-        if (shape.IsVisible(pt, &graphics)) {
-            iterator.NextMarker(&shape);
+        gfx.TransformPoints(CoordinateSpaceWorld, CoordinateSpaceDevice, &pt, 1);
+        if (shape.IsVisible(pt, &gfx)) {
+            iter.NextMarker(&shape);
             if (overClose)
-                *overClose = shape.IsVisible(pt, &graphics) ? true : false;
+                *overClose = shape.IsVisible(pt, &gfx) ? true : false;
             return i;
         }
-        graphics.TranslateTransform(REAL(width + 1), 0.0f);
+        gfx.TranslateTransform(REAL(width + 1), 0.0f);
     }
     if (overClose)
         *overClose = false;
@@ -206,7 +206,7 @@ int TabPainter::IndexFromPoint(int x, int y, bool *overClose) {
 }
 
 // Invalidates the tab's region in the client area.
-void TabPainter::Invalidate(int tabIdx) {
+void TabsControl::Invalidate(int tabIdx) {
     if (tabIdx < 0) return;
 
     Graphics gfx(hwnd);
@@ -225,7 +225,7 @@ void TabPainter::Invalidate(int tabIdx) {
 }
 
 // Paints the tabs that intersect the window's update rectangle.
-void TabPainter::Paint(HDC hdc, RECT &rc) {
+void TabsControl::Paint(HDC hdc, RECT &rc) {
     int hoverTabIdx = -1; // tab over which the cursor is
     bool mouseOverClose = false;
     PointI p;
@@ -362,7 +362,7 @@ void TabPainter::Paint(HDC hdc, RECT &rc) {
 }
 
 // Evaluates the colors for the tab's elements.
-void TabPainter::EvaluateColors(bool force) {
+void TabsControl::EvaluateColors(bool force) {
     COLORREF bg, txt;
     if (inTitlebar) {
         WindowInfo *win = FindWindowInfoByHwnd(hwnd);
@@ -422,7 +422,7 @@ static void NotifyTab(WindowInfo *win, UINT code) {
     if (TabsOnNotify(win, (LPARAM)&nmhdr)) {
         return;
     }
-    TabPainter *tab = (TabPainter *)GetWindowLongPtr(win->hwndTabBar, GWLP_USERDATA);
+    TabsControl *tab = (TabsControl *)GetWindowLongPtr(win->hwndTabBar, GWLP_USERDATA);
     if (TCN_SELCHANGING == code) {
         // if we have permission to select the tab
         tab->Invalidate(tab->current);
@@ -460,7 +460,7 @@ static bool IsDragging(HWND hwnd) {
     return hwnd == GetCapture();
 }
 
-static void OnWmPaint(TabPainter *tab) {
+static void OnWmPaint(TabsControl *tab) {
     PAINTSTRUCT ps;
     RECT rc;
 
@@ -475,7 +475,7 @@ static void OnWmPaint(TabPainter *tab) {
     EndPaint(hwnd, &ps);
 }
 
-static void OnLButtonDown(TabPainter *tab, int x, int y) {
+static void OnLButtonDown(TabsControl *tab, int x, int y) {
     HWND hwnd = tab->hwnd;
     bool overClose;
     tab->nextTab = tab->IndexFromPoint(x, y, &overClose);
@@ -494,7 +494,7 @@ static void OnLButtonDown(TabPainter *tab, int x, int y) {
     SetCapture(hwnd);
 }
 
-static void OnLButtonUp(TabPainter* tab, int x, int y) {
+static void OnLButtonUp(TabsControl* tab, int x, int y) {
     HWND hwnd = tab->hwnd;
 
     bool overClose;
@@ -514,7 +514,7 @@ static void OnLButtonUp(TabPainter* tab, int x, int y) {
     //tab->Invalidate(tabIdx);
 }
 
-static void OnMouseMove(TabPainter *tab, int x, int y) {
+static void OnMouseMove(TabsControl *tab, int x, int y) {
     HWND hwnd = tab->hwnd;
     bool isDragging = IsDragging(tab->hwnd);
     if (!isDragging) {
@@ -575,7 +575,7 @@ static LRESULT CALLBACK WndProcTabBar(HWND hwnd, UINT msg, WPARAM wParam, LPARAM
     LPTCITEM tcs;
 
     int tabIdx = (int)wParam;
-    TabPainter *tab = (TabPainter *)GetWindowLongPtr(hwnd, GWLP_USERDATA);
+    TabsControl *tab = (TabsControl *)GetWindowLongPtr(hwnd, GWLP_USERDATA);
 
     switch (msg) {
     case WM_DESTROY:
@@ -729,8 +729,8 @@ void CreateTabbar(WindowInfo *win)
     SetWindowLongPtr(hwndTabBar, GWLP_WNDPROC, (LONG_PTR)WndProcTabBar);
 
     SizeI tabSize = GetTabSize(win->hwndFrame);
-    TabPainter *tp = new TabPainter(hwndTabBar, tabSize);
-    SetWindowLongPtr(hwndTabBar, GWLP_USERDATA, (LONG_PTR)tp);
+    TabsControl *tabs = new TabsControl(hwndTabBar, tabSize);
+    SetWindowLongPtr(hwndTabBar, GWLP_USERDATA, (LONG_PTR)tabs);
 
     SetWindowFont(hwndTabBar, GetDefaultGuiFont(), FALSE);
     TabCtrl_SetItemSize(hwndTabBar, tabSize.dx, tabSize.dy);
@@ -785,7 +785,7 @@ void SaveCurrentTabInfo(WindowInfo *win)
 
 void UpdateCurrentTabBgColor(WindowInfo *win)
 {
-    TabPainter *tab = (TabPainter *)GetWindowLongPtr(win->hwndTabBar, GWLP_USERDATA);
+    TabsControl *tab = (TabsControl *)GetWindowLongPtr(win->hwndTabBar, GWLP_USERDATA);
     if (win->AsEbook()) {
         COLORREF txtCol;
         GetEbookUiColors(txtCol, tab->currBgCol);
@@ -920,7 +920,7 @@ void SetTabsInTitlebar(WindowInfo *win, bool set)
     if (set == win->tabsInTitlebar)
         return;
     win->tabsInTitlebar = set;
-    TabPainter *tab = (TabPainter *)GetWindowLongPtr(win->hwndTabBar, GWLP_USERDATA);
+    TabsControl *tab = (TabsControl *)GetWindowLongPtr(win->hwndTabBar, GWLP_USERDATA);
     tab->inTitlebar = set;
     SetParent(win->hwndTabBar, set ? win->hwndCaption : win->hwndFrame);
     ShowWindow(win->hwndCaption, set ? SW_SHOW : SW_HIDE);
