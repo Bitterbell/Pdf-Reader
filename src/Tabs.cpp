@@ -72,7 +72,7 @@ static inline Color ToColor(COLORREF c)
 
 class TabPainter
 {
-    WStrVec text;
+    WStrVec tabTitles;
     PathData *data;
     int width, height;
 public:
@@ -106,16 +106,16 @@ public:
     void EvaluateColors(bool force);
 
     int Count() {
-        return (int)text.Count();
+        return (int) tabTitles.Count();
     }
 
     void Insert(int idx, const WCHAR *t) {
-        text.InsertAt(idx, str::Dup(t));
+        tabTitles.InsertAt(idx, str::Dup(t));
     }
 
     bool Set(int idx, const WCHAR *t) {
         if (idx < Count()) {
-            str::ReplacePtr(&text.At(idx), t);
+            str::ReplacePtr(&tabTitles.At(idx), t);
             return true;
         }
         return false;
@@ -123,14 +123,14 @@ public:
 
     bool Delete(int idx) {
         if (idx < Count()) {
-            free(text.PopAt(idx));
+            free(tabTitles.PopAt(idx));
             return true;
         }
         return false;
     }
 
     void DeleteAll() {
-        text.Reset();
+        tabTitles.Reset();
     }
 
     void InvalidateAll() {
@@ -271,7 +271,9 @@ void TabPainter::Paint(HDC hdc, RECT &rc) {
     sf.SetTrimming(StringTrimmingEllipsisCharacter);
 
     REAL yPosTab = inTitlebar ? 0.0f : REAL(ClientRect(hwnd).dy - height - 1);
+    const WCHAR *tabText;
     for (int i = 0; i < Count(); i++) {
+        tabText = tabTitles.At(i);
         gfx.ResetTransform();
         gfx.TranslateTransform(1.f + (REAL) (width + 1) * i - (REAL) rc.left, yPosTab - (REAL) rc.top);
 
@@ -307,7 +309,7 @@ void TabPainter::Paint(HDC hdc, RECT &rc) {
             gfx.SetCompositingMode(CompositingModeSourceCopy);
             //gfx.SetCompositingMode(CompositingModeSourceOver);
             br.SetColor(ToColor(colors.text));
-            gfx.DrawString(text.At(i), -1, &f, layout, &sf, &br);
+            gfx.DrawString(tabText, -1, &f, layout, &sf, &br);
             gfx.SetTextRenderingHint(TextRenderingHintClearTypeGridFit);
             continue;
         }
@@ -337,7 +339,7 @@ void TabPainter::Paint(HDC hdc, RECT &rc) {
         // draw tab's text
         gfx.SetCompositingMode(CompositingModeSourceOver);
         br.SetColor(ToColor(textCol));
-        gfx.DrawString(text.At(i), -1, &f, layout, &sf, &br);
+        gfx.DrawString(tabText, -1, &f, layout, &sf, &br);
 
         // paint "x"'s circle
         iter.NextMarker(&shape);
