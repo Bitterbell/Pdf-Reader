@@ -30,6 +30,16 @@
 
 /*
 Notes on properly implementing drag&drop: http://www.mvps.org/user32/setcapture.html
+
+The logic of tab drag&drop is similar to Chrome:
+- we can re-arrange tabs within the same tab strip
+- we can drag out a tab to create its own window
+- we can move tab from one window to another
+
+Our visual behavior during dragging is closer to IE Edge than Chrome,
+due to implementation simplicity. Mostly, we don't try to preview the
+final state at all costs. When dragged out we only show the tab, not
+the content.
 */
 
 #define DEFAULT_CURRENT_BG_COL (COLORREF)-1
@@ -72,14 +82,14 @@ public:
     bool inTitlebar;
     COLORREF currBgCol;
     struct {
-        COLORREF background, highlight, current, outline, bar, text, x_highlight, x_click, x_line;
-    } color;
+        COLORREF bg, highlight, current, outline, bar, text, closeHighlight, closeClick, closeLine;
+    } colors;
 
     TabPainter(HWND wnd, SizeI tabSize) :
         hwnd(wnd), data(nullptr), width(0), height(0),
         current(-1), highlighted(-1), nextTab(-1),
         inTitlebar(false), currBgCol(DEFAULT_CURRENT_BG_COL) {
-        ZeroMemory(&color, sizeof(color));
+        ZeroMemory(&colors, sizeof(colors));
         Reshape(tabSize.dx, tabSize.dy);
         EvaluateColors(false);
     }
@@ -199,28 +209,28 @@ int TabPainter::IndexFromPoint(int x, int y, bool *overClose) {
 void TabPainter::Invalidate(int tabIdx) {
     if (tabIdx < 0) return;
 
-    Graphics graphics(hwnd);
+    Graphics gfx(hwnd);
     GraphicsPath shapes(data->Points, data->Types, data->Count);
     GraphicsPath shape;
-    GraphicsPathIterator iterator(&shapes);
-    iterator.NextMarker(&shape);
+    GraphicsPathIterator iter(&shapes);
+    iter.NextMarker(&shape);
     Region region(&shape);
 
     ClientRect rClient(hwnd);
     REAL yPosTab = inTitlebar ? 0.0f : REAL(rClient.dy - height - 1);
-    graphics.TranslateTransform(REAL((width + 1) * tabIdx) + 1.0f, yPosTab);
-    HRGN hRgn = region.GetHRGN(&graphics);
+    gfx.TranslateTransform(REAL((width + 1) * tabIdx) + 1.0f, yPosTab);
+    HRGN hRgn = region.GetHRGN(&gfx);
     InvalidateRgn(hwnd, hRgn, FALSE);
     DeleteObject(hRgn);
 }
 
 // Paints the tabs that intersect the window's update rectangle.
 void TabPainter::Paint(HDC hdc, RECT &rc) {
-    int tabIdx = -1;
+    int hoverTabIdx = -1; // tab over which the cursor is
     bool mouseOverClose = false;
     PointI p;
     if (GetCursorPosInHwnd(hwnd, p)) {
-        tabIdx = IndexFromPoint(p.x, p.y, &mouseOverClose);
+        hoverTabIdx = IndexFromPoint(p.x, p.y, &mouseOverClose);
     }
 
     IntersectClipRect(hdc, rc.left, rc.top, rc.right, rc.bottom);
@@ -230,7 +240,7 @@ void TabPainter::Paint(HDC hdc, RECT &rc) {
     if (isTranslucentMode)
         PaintParentBackground(hwnd, hdc);
     else {
-        HBRUSH brush = CreateSolidBrush(color.bar);
+        HBRUSH brush = CreateSolidBrush(colors.bar);
         FillRect(hdc, &rc, brush);
         DeleteObject(brush);
     }
@@ -239,15 +249,15 @@ void TabPainter::Paint(HDC hdc, RECT &rc) {
     XFORM ctm = { 1.0, 0, 0, 1.0, 0, 0 };
     SetWorldTransform(hdc, &ctm);
 
-    Graphics graphics(hdc);
-    graphics.SetCompositingMode(CompositingModeSourceCopy);
-    graphics.SetCompositingQuality(CompositingQualityHighQuality);
-    graphics.SetSmoothingMode(SmoothingModeHighQuality);
-    graphics.SetTextRenderingHint(TextRenderingHintClearTypeGridFit);
-    graphics.SetPageUnit(UnitPixel);
+    Graphics gfx(hdc);
+    gfx.SetCompositingMode(CompositingModeSourceCopy);
+    gfx.SetCompositingQuality(CompositingQualityHighQuality);
+    gfx.SetSmoothingMode(SmoothingModeHighQuality);
+    gfx.SetTextRenderingHint(TextRenderingHintClearTypeGridFit);
+    gfx.SetPageUnit(UnitPixel);
     GraphicsPath shapes(data->Points, data->Types, data->Count);
     GraphicsPath shape;
-    GraphicsPathIterator iterator(&shapes);
+    GraphicsPathIterator iter(&shapes);
 
     SolidBrush br(Color(0, 0, 0));
     Pen pen(&br, 2.0f);
@@ -262,10 +272,10 @@ void TabPainter::Paint(HDC hdc, RECT &rc) {
 
     REAL yPosTab = inTitlebar ? 0.0f : REAL(ClientRect(hwnd).dy - height - 1);
     for (int i = 0; i < Count(); i++) {
-        graphics.ResetTransform();
-        graphics.TranslateTransform(1.f + (REAL) (width + 1) * i - (REAL) rc.left, yPosTab - (REAL) rc.top);
+        gfx.ResetTransform();
+        gfx.TranslateTransform(1.f + (REAL) (width + 1) * i - (REAL) rc.left, yPosTab - (REAL) rc.top);
 
-        if (!graphics.IsVisible(0, 0, width + 1, height + 1))
+        if (!gfx.IsVisible(0, 0, width + 1, height + 1))
             continue;
 
         // in firefox style we only paint current and highlighed tabs
@@ -277,15 +287,15 @@ void TabPainter::Paint(HDC hdc, RECT &rc) {
             // otherwise the text looks funny (because is transparent?)
             // TODO: what is the damn bg color of caption? bar is too light, outline is too dark
             Color bgColTmp;
-            bgColTmp.SetFromCOLORREF(color.bar);
+            bgColTmp.SetFromCOLORREF(colors.bar);
             {
                 SolidBrush bgBr(bgColTmp);
-                graphics.FillRectangle(&bgBr, layout);
+                gfx.FillRectangle(&bgBr, layout);
             }
-            bgColTmp.SetFromCOLORREF(color.outline);
+            bgColTmp.SetFromCOLORREF(colors.outline);
             {
                 SolidBrush bgBr(bgColTmp);
-                graphics.FillRectangle(&bgBr, layout);
+                gfx.FillRectangle(&bgBr, layout);
             }
 #endif
             // TODO: this is a hack. If I use no background and cleartype, the
@@ -293,25 +303,25 @@ void TabPainter::Paint(HDC hdc, RECT &rc) {
             // CompositingModeSourceCopy doesn't work with clear type
             // another option is to draw background before drawing text, but
             // I can't figure out what is the actual color of caption
-            graphics.SetTextRenderingHint(TextRenderingHintAntiAliasGridFit);
-            graphics.SetCompositingMode(CompositingModeSourceCopy);
-            //graphics.SetCompositingMode(CompositingModeSourceOver);
-            br.SetColor(ToColor(color.text));
-            graphics.DrawString(text.At(i), -1, &f, layout, &sf, &br);
-            graphics.SetTextRenderingHint(TextRenderingHintClearTypeGridFit);
+            gfx.SetTextRenderingHint(TextRenderingHintAntiAliasGridFit);
+            gfx.SetCompositingMode(CompositingModeSourceCopy);
+            //gfx.SetCompositingMode(CompositingModeSourceOver);
+            br.SetColor(ToColor(colors.text));
+            gfx.DrawString(text.At(i), -1, &f, layout, &sf, &br);
+            gfx.SetTextRenderingHint(TextRenderingHintClearTypeGridFit);
             continue;
         }
 
-        COLORREF bgCol = color.background;;
+        COLORREF bgCol = colors.bg;;
         if (current == i) {
-            bgCol = color.current;
+            bgCol = colors.current;
         } else if (highlighted == i) {
-            bgCol = color.highlight;
+            bgCol = colors.highlight;
         }
 
         // ensure contrast between text and background color
         // TODO: adjust threshold (and try adjusting both current/background tabs)
-        COLORREF textCol = color.text;
+        COLORREF textCol = colors.text;
         float bgLight = GetLightness(bgCol), textLight = GetLightness(textCol);
         if (textLight < bgLight ? bgLight < 0x70 : bgLight > 0x90)
             textCol = textLight ? AdjustLightness(textCol, 255.0f / textLight - 1.0f) : RGB(255, 255, 255);
@@ -319,33 +329,33 @@ void TabPainter::Paint(HDC hdc, RECT &rc) {
             textCol = bgLight < 0x80 ? RGB(255, 255, 255) : RGB(0, 0, 0);
 
         // paint tab's body
-        graphics.SetCompositingMode(CompositingModeSourceCopy);
-        iterator.NextMarker(&shape);
+        gfx.SetCompositingMode(CompositingModeSourceCopy);
+        iter.NextMarker(&shape);
         br.SetColor(ToColor(bgCol));
-        graphics.FillPath(&br, &shape);
+        gfx.FillPath(&br, &shape);
 
         // draw tab's text
-        graphics.SetCompositingMode(CompositingModeSourceOver);
+        gfx.SetCompositingMode(CompositingModeSourceOver);
         br.SetColor(ToColor(textCol));
-        graphics.DrawString(text.At(i), -1, &f, layout, &sf, &br);
+        gfx.DrawString(text.At(i), -1, &f, layout, &sf, &br);
 
         // paint "x"'s circle
-        iterator.NextMarker(&shape);
-        if (tabIdx == i && mouseOverClose) {
+        iter.NextMarker(&shape);
+        if (hoverTabIdx == i && mouseOverClose) {
             // TODO: change color depending on wether left mouse button is down
-            br.SetColor(ToColor(mouseOverClose ? color.x_highlight : color.x_click));
-            graphics.FillPath(&br, &shape);
+            br.SetColor(ToColor(mouseOverClose ? colors.closeHighlight : colors.closeClick));
+            gfx.FillPath(&br, &shape);
         }
 
         // paint "x"
-        iterator.NextMarker(&shape);
-        if (tabIdx == i && mouseOverClose) {
-            pen.SetColor(ToColor(color.x_line));
+        iter.NextMarker(&shape);
+        if (hoverTabIdx == i && mouseOverClose) {
+            pen.SetColor(ToColor(colors.closeLine));
         } else {
-            pen.SetColor(ToColor(color.outline));
+            pen.SetColor(ToColor(colors.outline));
         }
-        graphics.DrawPath(&pen, &shape);
-        iterator.Rewind();
+        gfx.DrawPath(&pen, &shape);
+        iter.Rewind();
     }
 }
 
@@ -360,23 +370,23 @@ void TabPainter::EvaluateColors(bool force) {
         bg = GetSysColor(TAB_COLOR_BG);
         txt = GetSysColor(TAB_COLOR_TEXT);
     }
-    if (!force && bg == color.bar && txt == color.text)
+    if (!force && bg == colors.bar && txt == colors.text)
         return;
 
-    color.bar = bg;
-    color.text = txt;
+    colors.bar = bg;
+    colors.text = txt;
 
-    int sign = GetLightness(color.text) > GetLightness(color.bar) ? -1 : 1;
+    int sign = GetLightness(colors.text) > GetLightness(colors.bar) ? -1 : 1;
 
-    color.current = AdjustLightness2(color.bar, sign * 25.0f);
-    color.highlight = AdjustLightness2(color.bar, sign * 15.0f);
-    color.background = AdjustLightness2(color.bar, -sign * 15.0f);
-    color.outline = AdjustLightness2(color.bar, -sign * 60.0f);
-    color.x_line = COL_CLOSE_X_HOVER;
-    color.x_highlight = COL_CLOSE_HOVER_BG;
-    color.x_click = AdjustLightness2(color.x_highlight, -10.0f);
+    colors.current = AdjustLightness2(colors.bar, sign * 25.0f);
+    colors.highlight = AdjustLightness2(colors.bar, sign * 15.0f);
+    colors.bg = AdjustLightness2(colors.bar, -sign * 15.0f);
+    colors.outline = AdjustLightness2(colors.bar, -sign * 60.0f);
+    colors.closeLine = COL_CLOSE_X_HOVER;
+    colors.closeHighlight = COL_CLOSE_HOVER_BG;
+    colors.closeClick = AdjustLightness2(colors.closeHighlight, -10.0f);
     if (currBgCol != DEFAULT_CURRENT_BG_COL) {
-        color.current = currBgCol;
+        colors.current = currBgCol;
     }
 }
 
