@@ -422,23 +422,23 @@ static void NotifyTab(WindowInfo *win, UINT code) {
     if (TabsOnNotify(win, (LPARAM)&nmhdr)) {
         return;
     }
-    TabsControl *tab = (TabsControl *)GetWindowLongPtr(win->hwndTabBar, GWLP_USERDATA);
+    TabsControl *tabs = (TabsControl *)GetWindowLongPtr(win->hwndTabBar, GWLP_USERDATA);
     if (TCN_SELCHANGING == code) {
         // if we have permission to select the tab
-        tab->Invalidate(tab->current);
-        tab->Invalidate(tab->nextTab);
-        tab->current = tab->nextTab;
+        tabs->Invalidate(tabs->current);
+        tabs->Invalidate(tabs->nextTab);
+        tabs->current = tabs->nextTab;
         // send notification that the tab is selected
         nmhdr.code = TCN_SELCHANGE;
         TabsOnNotify(win, (LPARAM)&nmhdr);
     }
 }
 
-static void SetTabTitle(WindowInfo *win, TabInfo *tab) {
+static void SetTabTitle(WindowInfo *win, TabInfo *tabs) {
     TCITEM tcs;
     tcs.mask = TCIF_TEXT;
-    tcs.pszText = (WCHAR *) tab->GetTabTitle();
-    TabCtrl_SetItem(win->hwndTabBar, win->tabs.Find(tab), &tcs);
+    tcs.pszText = (WCHAR *) tabs->GetTabTitle();
+    TabCtrl_SetItem(win->hwndTabBar, win->tabs.Find(tabs), &tcs);
 }
 
 static void SwapTabs(WindowInfo *win, int tab1, int tab2) {
@@ -460,45 +460,45 @@ static bool IsDragging(HWND hwnd) {
     return hwnd == GetCapture();
 }
 
-static void OnWmPaint(TabsControl *tab) {
+static void OnWmPaint(TabsControl *tabs) {
     PAINTSTRUCT ps;
     RECT rc;
 
-    HWND hwnd = tab->hwnd;
+    HWND hwnd = tabs->hwnd;
     GetUpdateRect(hwnd, &rc, FALSE);
     HDC hdc = BeginPaint(hwnd, &ps);
     DoubleBuffer buffer(hwnd, RectI::FromRECT(rc));
-    tab->EvaluateColors(false);
-    tab->Paint(buffer.GetDC(), rc);
+    tabs->EvaluateColors(false);
+    tabs->Paint(buffer.GetDC(), rc);
     buffer.Flush(hdc);
     ValidateRect(hwnd, nullptr);
     EndPaint(hwnd, &ps);
 }
 
-static void OnLButtonDown(TabsControl *tab, int x, int y) {
-    HWND hwnd = tab->hwnd;
+static void OnLButtonDown(TabsControl *tabs, int x, int y) {
+    HWND hwnd = tabs->hwnd;
     bool overClose;
-    tab->nextTab = tab->IndexFromPoint(x, y, &overClose);
-    if (tab->nextTab == -1) {
+    tabs->nextTab = tabs->IndexFromPoint(x, y, &overClose);
+    if (tabs->nextTab == -1) {
         return ;
     }
     if (overClose) {
-        tab->Invalidate(tab->nextTab);
+        tabs->Invalidate(tabs->nextTab);
         return;
     }
 
-    if (tab->nextTab != tab->current) {
+    if (tabs->nextTab != tabs->current) {
         WindowInfo *win = FindWindowInfoByHwnd(hwnd);
         NotifyTab(win, TCN_SELCHANGING);
     }
     SetCapture(hwnd);
 }
 
-static void OnLButtonUp(TabsControl* tab, int x, int y) {
-    HWND hwnd = tab->hwnd;
+static void OnLButtonUp(TabsControl* tabs, int x, int y) {
+    HWND hwnd = tabs->hwnd;
 
     bool overClose;
-    int tabIdx = tab->IndexFromPoint(x, y, &overClose);
+    int tabIdx = tabs->IndexFromPoint(x, y, &overClose);
 
     bool isDragging = IsDragging(hwnd);
     if (isDragging) {
@@ -511,60 +511,60 @@ static void OnLButtonUp(TabsControl* tab, int x, int y) {
 
     WindowInfo *win = FindWindowInfoByHwnd(hwnd);
     CloseOrRemoveTab(win, tabIdx);
-    //tab->Invalidate(tabIdx);
+    //tabs->Invalidate(tabIdx);
 }
 
-static void OnMouseMove(TabsControl *tab, int x, int y) {
-    HWND hwnd = tab->hwnd;
-    bool isDragging = IsDragging(tab->hwnd);
+static void OnMouseMove(TabsControl *tabs, int x, int y) {
+    HWND hwnd = tabs->hwnd;
+    bool isDragging = IsDragging(tabs->hwnd);
     if (!isDragging) {
-        tab->InvalidateAll();
+        tabs->InvalidateAll();
         return;
     }
 
 #if 0
-    if (!tab->isMouseInClientArea) {
+    if (!tabs->isMouseInClientArea) {
         // Track the mouse for leaving the client area.
         TRACKMOUSEEVENT tme = { 0 };
         tme.cbSize = sizeof(TRACKMOUSEEVENT);
         tme.dwFlags = TME_LEAVE;
-        tme.hwndTrack = tab->hwnd;
+        tme.hwndTrack = tabs->hwnd;
         if (TrackMouseEvent(&tme))
-            tab->isMouseInClientArea = true;
+            tabs->isMouseInClientArea = true;
     }
 #endif
 
 
     bool overClose = false;
-    int hl = tab->IndexFromPoint(x, y, &overClose);
+    int hl = tabs->IndexFromPoint(x, y, &overClose);
     if (isDragging && hl == -1) {
         // preserve the highlighted tab if it's dragged outside the tabs' area
-        hl = tab->highlighted;
+        hl = tabs->highlighted;
     }
-    if (tab->highlighted != hl && false) {
+    if (tabs->highlighted != hl && false) {
         if (isDragging) {
             // send notification if the highlighted tab is dragged over another
             WindowInfo *win = FindWindowInfoByHwnd(hwnd);
-            int tabNo = tab->highlighted;
+            int tabNo = tabs->highlighted;
             SwapTabs(win, tabNo, hl);
             //uitask::Post([=] { SwapTabs(win, tabNo, hl); });
             plogf("swapping tabs tabNo=%d, hl=%d", (int) tabNo, (int) hl);
         }
 
-        tab->Invalidate(hl);
-        tab->Invalidate(tab->highlighted);
-        tab->highlighted = hl;
+        tabs->Invalidate(hl);
+        tabs->Invalidate(tabs->highlighted);
+        tabs->highlighted = hl;
     }
 
 #if 0
     int xHl = overClose && !isDragging ? hl : -1;
-    if (tab->xHighlighted != xHl) {
-        tab->Invalidate(xHl);
-        tab->Invalidate(tab->xHighlighted);
-        tab->xHighlighted = xHl;
+    if (tabs->xHighlighted != xHl) {
+        tabs->Invalidate(xHl);
+        tabs->Invalidate(tabs->xHighlighted);
+        tabs->xHighlighted = xHl;
     }
     if (!overClose)
-        tab->xClicked = -1;
+        tabs->xClicked = -1;
 #endif
     plogf("WM_MOUSEMOVE %d %d, isDrag=%d, inX=%d", x, y, (int) isDragging, (int) overClose);
 }
@@ -575,20 +575,20 @@ static LRESULT CALLBACK WndProcTabBar(HWND hwnd, UINT msg, WPARAM wParam, LPARAM
     LPTCITEM tcs;
 
     int tabIdx = (int)wParam;
-    TabsControl *tab = (TabsControl *)GetWindowLongPtr(hwnd, GWLP_USERDATA);
+    TabsControl *tabs = (TabsControl *)GetWindowLongPtr(hwnd, GWLP_USERDATA);
 
     switch (msg) {
     case WM_DESTROY:
-        delete tab;
+        delete tabs;
         SetWindowLongPtr(hwnd, GWLP_USERDATA, (LONG_PTR)0);
         break;
 
     case TCM_INSERTITEM:
         tcs = (LPTCITEM)lParam;
         CrashIf(!(TCIF_TEXT & tcs->mask));
-        tab->Insert(tabIdx, tcs->pszText);
-        if (tabIdx <= tab->current)
-            tab->current++;
+        tabs->Insert(tabIdx, tcs->pszText);
+        if (tabIdx <= tabs->current)
+            tabs->current++;
         InvalidateRgn(hwnd, nullptr, FALSE);
         UpdateWindow(hwnd);
         break;
@@ -596,18 +596,18 @@ static LRESULT CALLBACK WndProcTabBar(HWND hwnd, UINT msg, WPARAM wParam, LPARAM
     case TCM_SETITEM:
         tcs = (LPTCITEM)lParam;
         if (TCIF_TEXT & tcs->mask) {
-            if (tab->Set(tabIdx, tcs->pszText))
-                tab->Invalidate(tabIdx);
+            if (tabs->Set(tabIdx, tcs->pszText))
+                tabs->Invalidate(tabIdx);
         }
         break;
 
     case TCM_DELETEITEM:
-        if (tab->Delete(tabIdx)) {
-            if (tabIdx < tab->current)
-                tab->current--;
-            else if (tabIdx == tab->current)
-                tab->current = -1;
-            if (tab->Count()) {
+        if (tabs->Delete(tabIdx)) {
+            if (tabIdx < tabs->current)
+                tabs->current--;
+            else if (tabIdx == tabs->current)
+                tabs->current = -1;
+            if (tabs->Count()) {
                 InvalidateRect(hwnd, nullptr, FALSE);
                 UpdateWindow(hwnd);
             }
@@ -615,32 +615,32 @@ static LRESULT CALLBACK WndProcTabBar(HWND hwnd, UINT msg, WPARAM wParam, LPARAM
         break;
 
     case TCM_DELETEALLITEMS:
-        tab->DeleteAll();
-        tab->current = tab->highlighted = -1;
+        tabs->DeleteAll();
+        tabs->current = tabs->highlighted = -1;
         break;
 
     case TCM_SETITEMSIZE:
-        if (tab->Reshape(LOWORD(lParam), HIWORD(lParam))) {
-            if (tab->Count()) {
-                tab->InvalidateAll();
+        if (tabs->Reshape(LOWORD(lParam), HIWORD(lParam))) {
+            if (tabs->Count()) {
+                tabs->InvalidateAll();
                 UpdateWindow(hwnd);
             }
         }
         break;
 
     case TCM_GETCURSEL:
-        return tab->current;
+        return tabs->current;
 
     case TCM_SETCURSEL:
         {
-            if (tabIdx >= tab->Count()) {
+            if (tabIdx >= tabs->Count()) {
                 return -1;
             }
-            int previous = tab->current;
-            if (tabIdx != tab->current) {
-                tab->Invalidate(tab->current);
-                tab->Invalidate(tabIdx);
-                tab->current = tabIdx;
+            int previous = tabs->current;
+            if (tabIdx != tabs->current) {
+                tabs->Invalidate(tabs->current);
+                tabs->Invalidate(tabIdx);
+                tabs->current = tabIdx;
                 UpdateWindow(hwnd);
             }
             return previous;
@@ -648,11 +648,11 @@ static LRESULT CALLBACK WndProcTabBar(HWND hwnd, UINT msg, WPARAM wParam, LPARAM
 
     case WM_NCHITTEST:
         {
-            if (!tab->inTitlebar || hwnd == GetCapture())
+            if (!tabs->inTitlebar || hwnd == GetCapture())
                 return HTCLIENT;
             POINT pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
             ScreenToClient(hwnd, &pt);
-            if (-1 != tab->IndexFromPoint(pt.x, pt.y))
+            if (-1 != tabs->IndexFromPoint(pt.x, pt.y))
                 return HTCLIENT;
         }
         return HTTRANSPARENT;
@@ -662,15 +662,15 @@ static LRESULT CALLBACK WndProcTabBar(HWND hwnd, UINT msg, WPARAM wParam, LPARAM
         return 0;
 
     case WM_MOUSEMOVE:
-        OnMouseMove(tab, GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
+        OnMouseMove(tabs, GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
         return 0;
 
     case WM_LBUTTONDOWN:
-        OnLButtonDown(tab, GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
+        OnLButtonDown(tabs, GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
         return 0;
 
     case WM_LBUTTONUP:
-        OnLButtonUp(tab, GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
+        OnLButtonUp(tabs, GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
         return 0;
 
 
@@ -678,21 +678,21 @@ static LRESULT CALLBACK WndProcTabBar(HWND hwnd, UINT msg, WPARAM wParam, LPARAM
     case WM_MBUTTONDOWN:
         // middle-clicking unconditionally closes the tab
         {
-            tab->nextTab = tab->IndexFromPoint(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
+            tabs->nextTab = tabs->IndexFromPoint(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
             // send request to close the tab
             WindowInfo *win = FindWindowInfoByHwnd(hwnd);
-            int next = tab->nextTab;
-            NotifyTabWillClose(tab);
+            int next = tabs->nextTab;
+            NotifyTabWillClose(tabs);
         }
         return 0;
 
     case WM_MBUTTONUP:
-        if (tab->xClicked != -1) {
+        if (tabs->xClicked != -1) {
             WindowInfo *win = FindWindowInfoByHwnd(hwnd);
-            int clicked = tab->xClicked;
+            int clicked = tabs->xClicked;
             uitask::Post([=] { CloseOrRemoveTab(win, clicked); });
-            tab->Invalidate(clicked);
-            tab->xClicked = -1;
+            tabs->Invalidate(clicked);
+            tabs->xClicked = -1;
         }
         return 0;
 #endif
@@ -701,7 +701,7 @@ static LRESULT CALLBACK WndProcTabBar(HWND hwnd, UINT msg, WPARAM wParam, LPARAM
         return TRUE;
 
     case WM_PAINT:
-        OnWmPaint(tab);
+        OnWmPaint(tabs);
         return 0;
 
     case WM_SIZE:
@@ -785,15 +785,15 @@ void SaveCurrentTabInfo(WindowInfo *win)
 
 void UpdateCurrentTabBgColor(WindowInfo *win)
 {
-    TabsControl *tab = (TabsControl *)GetWindowLongPtr(win->hwndTabBar, GWLP_USERDATA);
+    TabsControl *tabs = (TabsControl *)GetWindowLongPtr(win->hwndTabBar, GWLP_USERDATA);
     if (win->AsEbook()) {
         COLORREF txtCol;
-        GetEbookUiColors(txtCol, tab->currBgCol);
+        GetEbookUiColors(txtCol, tabs->currBgCol);
     } else {
         // TODO: match either the toolbar (if shown) or background
-        tab->currBgCol = DEFAULT_CURRENT_BG_COL;
+        tabs->currBgCol = DEFAULT_CURRENT_BG_COL;
     }
-    tab->EvaluateColors(true);
+    tabs->EvaluateColors(true);
     RepaintNow(win->hwndTabBar);
 }
 
@@ -804,13 +804,13 @@ TabInfo *CreateNewTab(WindowInfo *win, const WCHAR *filePath)
     if (!win)
         return nullptr;
 
-    TabInfo *tab = new TabInfo(filePath);
-    win->tabs.Append(tab);
-    tab->canvasRc = win->canvasRc;
+    TabInfo *tabs = new TabInfo(filePath);
+    win->tabs.Append(tabs);
+    tabs->canvasRc = win->canvasRc;
 
     TCITEM tcs;
     tcs.mask = TCIF_TEXT;
-    tcs.pszText = (WCHAR *)tab->GetTabTitle();
+    tcs.pszText = (WCHAR *) tabs->GetTabTitle();
 
     int index = (int)win->tabs.Count() - 1;
     if (-1 != TabCtrl_InsertItem(win->hwndTabBar, index, &tcs)) {
@@ -822,7 +822,7 @@ TabInfo *CreateNewTab(WindowInfo *win, const WCHAR *filePath)
         CrashIf(true);
     }
 
-    return tab;
+    return tabs;
 }
 
 // Refresh the tab's title
@@ -920,8 +920,8 @@ void SetTabsInTitlebar(WindowInfo *win, bool set)
     if (set == win->tabsInTitlebar)
         return;
     win->tabsInTitlebar = set;
-    TabsControl *tab = (TabsControl *)GetWindowLongPtr(win->hwndTabBar, GWLP_USERDATA);
-    tab->inTitlebar = set;
+    TabsControl *tabs = (TabsControl *)GetWindowLongPtr(win->hwndTabBar, GWLP_USERDATA);
+    tabs->inTitlebar = set;
     SetParent(win->hwndTabBar, set ? win->hwndCaption : win->hwndFrame);
     ShowWindow(win->hwndCaption, set ? SW_SHOW : SW_HIDE);
     if (set != win->isMenuHidden)
