@@ -870,8 +870,7 @@ void TabsOnChangedDoc(WindowInfo *win)
     SetTabTitle(win, tab);
 }
 
-// Called when we're closing a document
-void TabsOnCloseDoc(WindowInfo *win)
+void CloseAndRemoveDocInCurrentTab(WindowInfo *win)
 {
     if (win->tabs.Count() == 0)
         return;
@@ -891,7 +890,7 @@ void TabsOnCloseDoc(WindowInfo *win)
 }
 
 // Called when we're closing an entire window (quitting)
-void TabsOnCloseWindow(WindowInfo *win)
+void DestroyTabs(WindowInfo *win)
 {
     TabCtrl_DeleteAllItems(win->hwndTabBar);
     win->tabSelectionHistory->Reset();

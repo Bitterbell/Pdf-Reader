@@ -8,8 +8,8 @@ void LoadModelIntoTab(WindowInfo *win, TabInfo *tdata);
 
 void CreateTabbar(WindowInfo *win);
 TabInfo *CreateNewTab(WindowInfo *win, const WCHAR *filePath);
-void TabsOnCloseDoc(WindowInfo *win);
-void TabsOnCloseWindow(WindowInfo *win);
+void CloseAndRemoveDocInCurrentTab(WindowInfo *win);
+void DestroyTabs(WindowInfo *win);
 void TabsOnChangedDoc(WindowInfo *win);
 LRESULT TabsOnNotify(WindowInfo *win, LPARAM lparam);
 void TabsSelect(WindowInfo *win, int tabIndex);

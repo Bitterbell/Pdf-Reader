@@ -2161,7 +2161,7 @@ void CloseCurrentTab(WindowInfo *win, bool quitIfLast)
     else {
         CrashIf(gPluginMode && gWindows.Find(win) == 0);
         AbortFinding(win, true);
-        TabsOnCloseDoc(win);
+        CloseAndRemoveDocInCurrentTab(win);
     }
 }
 
@@ -2229,7 +2229,7 @@ void CloseWindow(WindowInfo *win, bool quitIfLast, bool forceClose)
             UpdateTabFileDisplayStateForWin(win, tab);
         }
     }
-    TabsOnCloseWindow(win);
+    DestroyTabs(win);
 
     if (forceClose) {
         // WM_DESTROY has already been sent, so don't destroy win->hwndFrame again
