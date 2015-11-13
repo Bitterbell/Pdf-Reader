@@ -219,6 +219,7 @@ public:
     }
 };
 
+// TODO: rename to WindowRectScreen
 class WindowRect : public RectI {
 public:
     explicit WindowRect(HWND hwnd) {

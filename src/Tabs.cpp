@@ -70,15 +70,42 @@ static inline Color ToColor(COLORREF c)
     return Color(GetRValueSafe(c), GetGValueSafe(c), GetBValueSafe(c));
 }
 
-struct DragInfo {
-    WindowInfo *winStart;
-    bool cursorOverTab;
-    int origTabIdx;
+struct TabDragInfo {
+    WindowInfo *win;
+    int tabIdx;
+    bool isOverClose;
 
+    TabDragInfo();
+    TabDragInfo(const TabDragInfo& other);
+
+    void Reset();
+};
+
+TabDragInfo::TabDragInfo() {
+    Reset();
+}
+
+TabDragInfo::TabDragInfo(const TabDragInfo& other) {
+    win = other.win;
+    tabIdx = other.tabIdx;
+    isOverClose = other.isOverClose;
+}
+
+void TabDragInfo::Reset() {
+    win = nullptr;
+    tabIdx = -1;
+    isOverClose = false;
+}
+
+struct DragInfo {
+    // for the point that initiated drag
+    TabDragInfo start;
+    // for the last mouse position
+    TabDragInfo last;
     DragInfo();
 };
 
-DragInfo::DragInfo() : winStart(nullptr), cursorOverTab(false), origTabIdx(-1) {
+DragInfo::DragInfo() {
 }
 
 class TabsControl
@@ -113,7 +140,7 @@ public:
     }
 
     bool Reshape(int dx, int dy);
-    int IndexFromPoint(int x, int y, bool *overClose = nullptr);
+    int IndexFromPoint(int x, int y, bool *overClose);
     void Paint(HDC hdc, RECT &rc);
     void EvaluateColors(bool force);
 
@@ -468,6 +495,7 @@ static void OnWmPaint(TabsControl *tabs) {
     EndPaint(hwnd, &ps);
 }
 
+#if 0
 // given a point on the screen, return WindowInfo of a window
 // if a cursor is over that window's TabsControl
 static WindowInfo *TabsControlFromCursorPos() {
@@ -480,11 +508,53 @@ static WindowInfo *TabsControlFromCursorPos() {
     }
     return nullptr;
 }
+#endif
+
+static void TabDragInfoFromCursorPos(TabDragInfo& i) {
+    HWND hwnd;
+    POINT ptScreen, ptWin;
+    int x, y;
+
+    GetCursorPos(&ptScreen);
+    i.Reset();
+    for (WindowInfo* win : gWindows) {
+        hwnd = win->hwndFrame;
+        WindowRect r(hwnd);
+        if (!r.Contains(PointI(ptScreen.x, ptScreen.y))) {
+            continue;
+        }
+        i.win = win;
+        HWND hwndTabs = win->hwndTabBar;
+        // TODO: TabsControl should be part of WindowInfo
+        TabsControl *tabs = (TabsControl *) GetWindowLongPtr(hwndTabs, GWLP_USERDATA);
+        CrashIf(!tabs);
+        ptWin = ptScreen;
+        BOOL converted = ScreenToClient(hwndTabs, &ptWin);
+        x = (int) ptWin.x;
+        y = (int) ptWin.y;
+        if (converted) {
+            i.tabIdx = tabs->IndexFromPoint(x, y, &i.isOverClose);
+        }
+        //plogf("TabDragInfoFromCursorPos(): i.tabIdx: %d under x: %d, y: %d", i.tabIdx, x, y);
+        return;
+    }
+}
 
 static WindowInfo* gPrevMouseMoveWin;
 
 static void OnLButtonDown(TabsControl *tabs, int x, int y) {
     HWND hwnd = tabs->hwnd;
+    TabDragInfo di;
+    TabDragInfoFromCursorPos(di);
+    if (di.tabIdx == -1) {
+        plogf("OnLButtonDown: no tab under x: %d, y: %d", x, y);
+        // TODO: is this possible? If we got this message, it should have been over a tab bar
+        return;
+    }
+
+    tabs->di.start = di;
+
+#if 0
     tabs->di.cursorOverTab = true;
     bool overClose;
     tabs->di.origTabIdx = tabs->IndexFromPoint(x, y, &overClose);
@@ -496,15 +566,17 @@ static void OnLButtonDown(TabsControl *tabs, int x, int y) {
     WindowInfo *win2 = FindWindowInfoByHwnd(hwnd);
     CrashIf(win != win2);
     tabs->di.winStart = win;
-    plogf("OnLButtonDown: WindowInfo: %p", win);
+#endif
+    plogf("OnLButtonDown: WindowInfo: %p", tabs->di.start.win);
     gPrevMouseMoveWin = nullptr;
-    if (overClose) {
+    if (di.isOverClose) {
+        plogf("  over close");
         tabs->Invalidate();
         return;
     }
 
 #if 0
-    if (tabs->nextTab != tabs->current) {
+    if (di.tabIdx != tabs->selectedIdx) {
         WindowInfo *win = FindWindowInfoByHwnd(hwnd);
         NotifyTab(win, TCN_SELCHANGING);
     }
@@ -519,10 +591,11 @@ static void OnMouseMove(TabsControl *tabs, int x, int y) {
         tabs->Invalidate();
         return;
     }
-    WindowInfo *winTmp = TabsControlFromCursorPos();
-    if (gPrevMouseMoveWin != winTmp) {
-        plogf("OnMouseMove: WindowInfo: %p", winTmp);
-        gPrevMouseMoveWin = winTmp;
+    TabDragInfo di;
+    TabDragInfoFromCursorPos(di);
+    if (gPrevMouseMoveWin != di.win) {
+        plogf("OnMouseMove: WindowInfo: %p", di.win);
+        gPrevMouseMoveWin = di.win;
     }
 
 #if 0
@@ -536,7 +609,6 @@ static void OnMouseMove(TabsControl *tabs, int x, int y) {
             tabs->isMouseInClientArea = true;
     }
 #endif
-
 
     bool overClose = false;
     int hl = tabs->IndexFromPoint(x, y, &overClose);
@@ -570,35 +642,43 @@ static void OnMouseMove(TabsControl *tabs, int x, int y) {
     //plogf("WM_MOUSEMOVE %d %d, isDrag=%d, inX=%d", x, y, (int) isDragging, (int) overClose);
 }
 
-#if 0
+// TODO: move tab from one window to another
 static void MoveTabsBetweenWindows(WindowInfo *dstWin, WindowInfo *srcWin, int tabIdx) {
-
+    plogf("TODO: move a tab %d from %p to %p", tabIdx, srcWin, dstWin);
 }
-#endif
 
-static void OnLButtonUp(TabsControl* tabs, int x, int y) {
+static void OnLButtonUp(TabsControl* tabs) {
     HWND hwnd = tabs->hwnd;
 
-    bool overClose;
-    int tabIdx = tabs->IndexFromPoint(x, y, &overClose);
+    TabDragInfo di;
+    TabDragInfoFromCursorPos(di);
 
     bool isDragging = IsDragging(hwnd);
     if (isDragging) {
         ReleaseCapture();
     }
-    WindowInfo *winTmp = TabsControlFromCursorPos();
-    plogf("OnLButtonUp: WindowInfo: %p", winTmp);
-    if (winTmp != tabs->di.winStart) {
-        // TODO: move tab from one window to another
+    plogf("OnLButtonUp: WindowInfo: %p, isDragging=%d", di.win, (int)isDragging);
+
+    if (di.win == tabs->di.start.win) {
+        if ((di.isOverClose && tabs->di.start.isOverClose) &&
+        (di.tabIdx == tabs->di.start.tabIdx)) {
+            CloseOrRemoveTab(di.win, di.tabIdx);
+            return;
+        }
     }
 
-    //plogf("WM_LBUTTONUP %d %d isDrag=%d, overClose=%d", x, y, (int) isDragging, (int)overClose);
-    if (!overClose) {
+    if (!isDragging) {
         return;
     }
 
-    WindowInfo *win = FindWindowInfoByHwnd(hwnd);
-    CloseOrRemoveTab(win, tabIdx);
+    if (di.win != tabs->di.start.win) {
+        MoveTabsBetweenWindows(di.win, tabs->di.start.win, tabs->di.start.tabIdx);
+        return;
+    }
+
+    //plogf("WM_LBUTTONUP %d %d isDrag=%d, overClose=%d", x, y, (int) isDragging, (int)overClose);
+
+    //WindowInfo *win = FindWindowInfoByHwnd(hwnd);
     //tabs->Invalidate();
 }
 
@@ -684,7 +764,7 @@ static LRESULT CALLBACK WndProcTabBar(HWND hwnd, UINT msg, WPARAM wParam, LPARAM
                 return HTCLIENT;
             POINT pt = {GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam)};
             ScreenToClient(hwnd, &pt);
-            if (-1 != tabs->IndexFromPoint(pt.x, pt.y))
+            if (-1 != tabs->IndexFromPoint(pt.x, pt.y, nullptr))
                 return HTCLIENT;
         }
         return HTTRANSPARENT;
@@ -702,7 +782,7 @@ static LRESULT CALLBACK WndProcTabBar(HWND hwnd, UINT msg, WPARAM wParam, LPARAM
         return 0;
 
     case WM_LBUTTONUP:
-        OnLButtonUp(tabs, GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
+        OnLButtonUp(tabs);
         return 0;
 
 
@@ -710,7 +790,7 @@ static LRESULT CALLBACK WndProcTabBar(HWND hwnd, UINT msg, WPARAM wParam, LPARAM
     case WM_MBUTTONDOWN:
         // middle-clicking unconditionally closes the tab
         {
-            tabs->nextTab = tabs->IndexFromPoint(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
+            tabs->nextTab = tabs->IndexFromPoint(GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam), nullptr);
             // send request to close the tab
             WindowInfo *win = FindWindowInfoByHwnd(hwnd);
             int next = tabs->nextTab;
