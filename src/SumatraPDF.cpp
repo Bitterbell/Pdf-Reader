@@ -2147,7 +2147,7 @@ static void CloseDocumentInTab(WindowInfo *win, bool keepUIEnabled, bool deleteM
 // closes the current tab, selecting the next one
 // if there's only a single tab left, the window is closed if there
 // are other windows, else the Frequently Read page is displayed
-void CloseTab(WindowInfo *win, bool quitIfLast)
+void CloseCurrentTab(WindowInfo *win, bool quitIfLast)
 {
     CrashIf(!win);
     if (!win) return;
@@ -3446,7 +3446,7 @@ static void FrameOnChar(WindowInfo& win, WPARAM key, LPARAM info=0)
     case 'q':
         // close the current document (it's too easy to press for discarding multiple tabs)
         // quit if this is the last window
-        CloseTab(&win, true);
+        CloseCurrentTab(&win, true);
         return;
     case 'r':
         ReloadDocument(&win);
@@ -3809,7 +3809,7 @@ static LRESULT FrameOnCommand(WindowInfo *win, HWND hwnd, UINT msg, WPARAM wPara
 
         case IDM_CLOSE:
         case IDT_FILE_EXIT:
-            CloseTab(win);
+            CloseCurrentTab(win, false);
             break;
 
         case IDM_EXIT:

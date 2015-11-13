@@ -70,22 +70,15 @@ static inline Color ToColor(COLORREF c)
     return Color(GetRValueSafe(c), GetGValueSafe(c), GetBValueSafe(c));
 }
 
-enum class DragState {
-    None,
-    OverOriginalTabControl,
-    OverNewTabControl,
-    Detached,
-};
-
 struct DragInfo {
     WindowInfo *winStart;
-    DragState state;
+    bool cursorOverTab;
     int origTabIdx;
 
     DragInfo();
 };
 
-DragInfo::DragInfo() : winStart(nullptr), state(DragState::None), origTabIdx(-1) {
+DragInfo::DragInfo() : winStart(nullptr), cursorOverTab(false), origTabIdx(-1) {
 }
 
 class TabsControl
@@ -409,7 +402,7 @@ static void RemoveTab(WindowInfo *win, int idx) {
 static void CloseOrRemoveTab(WindowInfo *win, int tabIdx) {
     int currIdx = TabCtrl_GetCurSel(win->hwndTabBar);
     if (tabIdx == currIdx)
-        CloseTab(win);
+        CloseCurrentTab(win, false);
     else
         RemoveTab(win, tabIdx);
 }
@@ -475,14 +468,36 @@ static void OnWmPaint(TabsControl *tabs) {
     EndPaint(hwnd, &ps);
 }
 
+// given a point on the screen, return WindowInfo of a window
+// if a cursor is over that window's TabsControl
+static WindowInfo *TabsControlFromCursorPos() {
+    HWND hwnd;
+    for (WindowInfo* win : gWindows) {
+        hwnd = win->hwndFrame;
+        if (IsCursorOverWindow(hwnd)) {
+            return win;
+        }
+    }
+    return nullptr;
+}
+
+static WindowInfo* gPrevMouseMoveWin;
+
 static void OnLButtonDown(TabsControl *tabs, int x, int y) {
     HWND hwnd = tabs->hwnd;
-    tabs->di.state = DragState::None;
+    tabs->di.cursorOverTab = true;
     bool overClose;
     tabs->di.origTabIdx = tabs->IndexFromPoint(x, y, &overClose);
     if (tabs->di.origTabIdx == -1) {
         return;
     }
+    WindowInfo *win = TabsControlFromCursorPos();
+    CrashIf(!win);
+    WindowInfo *win2 = FindWindowInfoByHwnd(hwnd);
+    CrashIf(win != win2);
+    tabs->di.winStart = win;
+    plogf("OnLButtonDown: WindowInfo: %p", win);
+    gPrevMouseMoveWin = nullptr;
     if (overClose) {
         tabs->Invalidate();
         return;
@@ -497,32 +512,17 @@ static void OnLButtonDown(TabsControl *tabs, int x, int y) {
     SetCapture(hwnd);
 }
 
-static void OnLButtonUp(TabsControl* tabs, int x, int y) {
-    HWND hwnd = tabs->hwnd;
-
-    bool overClose;
-    int tabIdx = tabs->IndexFromPoint(x, y, &overClose);
-
-    bool isDragging = IsDragging(hwnd);
-    if (isDragging) {
-        ReleaseCapture();
-    }
-    plogf("WM_LBUTTONUP %d %d isDrag=%d, overClose=%d", x, y, (int) isDragging, (int)overClose);
-    if (!overClose) {
-        return;
-    }
-
-    WindowInfo *win = FindWindowInfoByHwnd(hwnd);
-    CloseOrRemoveTab(win, tabIdx);
-    //tabs->Invalidate();
-}
-
 static void OnMouseMove(TabsControl *tabs, int x, int y) {
     HWND hwnd = tabs->hwnd;
     bool isDragging = IsDragging(tabs->hwnd);
     if (!isDragging) {
         tabs->Invalidate();
         return;
+    }
+    WindowInfo *winTmp = TabsControlFromCursorPos();
+    if (gPrevMouseMoveWin != winTmp) {
+        plogf("OnMouseMove: WindowInfo: %p", winTmp);
+        gPrevMouseMoveWin = winTmp;
     }
 
 #if 0
@@ -567,7 +567,39 @@ static void OnMouseMove(TabsControl *tabs, int x, int y) {
     if (!overClose)
         tabs->xClicked = -1;
 #endif
-    plogf("WM_MOUSEMOVE %d %d, isDrag=%d, inX=%d", x, y, (int) isDragging, (int) overClose);
+    //plogf("WM_MOUSEMOVE %d %d, isDrag=%d, inX=%d", x, y, (int) isDragging, (int) overClose);
+}
+
+#if 0
+static void MoveTabsBetweenWindows(WindowInfo *dstWin, WindowInfo *srcWin, int tabIdx) {
+
+}
+#endif
+
+static void OnLButtonUp(TabsControl* tabs, int x, int y) {
+    HWND hwnd = tabs->hwnd;
+
+    bool overClose;
+    int tabIdx = tabs->IndexFromPoint(x, y, &overClose);
+
+    bool isDragging = IsDragging(hwnd);
+    if (isDragging) {
+        ReleaseCapture();
+    }
+    WindowInfo *winTmp = TabsControlFromCursorPos();
+    plogf("OnLButtonUp: WindowInfo: %p", winTmp);
+    if (winTmp != tabs->di.winStart) {
+        // TODO: move tab from one window to another
+    }
+
+    //plogf("WM_LBUTTONUP %d %d isDrag=%d, overClose=%d", x, y, (int) isDragging, (int)overClose);
+    if (!overClose) {
+        return;
+    }
+
+    WindowInfo *win = FindWindowInfoByHwnd(hwnd);
+    CloseOrRemoveTab(win, tabIdx);
+    //tabs->Invalidate();
 }
 
 static WNDPROC DefWndProcTabBar = nullptr;
