@@ -15,6 +15,17 @@
     <None Include="..\docs\releaseplan.txt">
       <Filter>docs</Filter>
     </None>
+    <None Include="..\src\SumatraPDF.exe.manifest">
+      <Filter>src</Filter>
+    </None>
+    <None Include="..\src\SumatraPDF.ico">
+      <Filter>src</Filter>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\src\SumatraPDF.h">
+      <Filter>src</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\src\SumatraPDF.cpp">

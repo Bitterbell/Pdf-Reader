@@ -724,10 +724,9 @@ end
 
 function sumatrapdf_files()
   files {
-    "src/SumatraPDF.cpp",
+    "src/SumatraPDF.*", -- .cpp, .h, .rc
     "src/SumatraStartup.cpp",
     "src/Tests.cpp",
-    "src/SumatraPDF.rc",
   }
 end
 
