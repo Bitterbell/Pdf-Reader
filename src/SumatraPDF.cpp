@@ -132,7 +132,7 @@ static WStrVec               gAllowedLinkProtocols;
 // on an in-document link); examples: "audio", "video", ...
 static WStrVec               gAllowedFileTypes;
 
-static void CloseDocumentInTab(WindowInfo *win, bool keepUIEnabled=false, bool deleteModel=false);
+static void CloseDocumentInTab(WindowInfo *win, bool keepUIEnabled, bool deleteModel);
 static void UpdatePageInfoHelper(WindowInfo *win, NotificationWnd *wnd=nullptr, int pageNo=-1);
 static bool SidebarSplitterCb(void *ctx, bool done);
 static bool FavSplitterCb(void *ctx, bool done);
@@ -1533,7 +1533,8 @@ WindowInfo* LoadDocument(LoadArgs& args)
         if (openNewTab) {
             SaveCurrentTabInfo(args.win);
         }
-        CloseDocumentInTab(win, true, args.forceReuse);
+        bool deleteModel = args.forceReuse;
+        CloseDocumentInTab(win, true /* keepUIEnabled */, deleteModel);
     }
     if (!args.forceReuse) {
         // insert a new tab for the loaded document
@@ -1587,7 +1588,7 @@ void LoadModelIntoTab(WindowInfo *win, TabInfo *tdata)
 {
     if (!win || !tdata) return;
 
-    CloseDocumentInTab(win, true);
+    CloseDocumentInTab(win, true /* keepUIEnabled */, false /* deleteModel */);
 
     win->currentTab = tdata;
     win->ctrl = tdata->ctrl;
@@ -2235,7 +2236,7 @@ void CloseWindow(WindowInfo *win, bool quitIfLast, bool forceClose)
         DeleteWindowInfo(win);
     } else if (lastWindow && !quitIfLast) {
         /* last window - don't delete it */
-        CloseDocumentInTab(win);
+        CloseDocumentInTab(win, false /* keepUIEnabled */, false /* deleteModel */);
         SetFocus(win->hwndFrame);
         CrashIf(!gWindows.Contains(win));
     } else {
@@ -2507,7 +2508,7 @@ static void OnMenuRenameFile(WindowInfo &win)
         return;
 
     UpdateTabFileDisplayStateForWin(&win, win.currentTab);
-    CloseDocumentInTab(&win, true, true);
+    CloseDocumentInTab(&win, true /* keepUIEnabled */, true /* deleteModel */);
     SetFocus(win.hwndFrame);
 
     DWORD flags = MOVEFILE_COPY_ALLOWED | MOVEFILE_REPLACE_EXISTING;
