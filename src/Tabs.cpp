@@ -51,6 +51,11 @@ Background color:
 
 TODO: make colors match IE Edge instead of iTerm2.
 
+Edge:
+* f2f2f2 : selected tab
+* cccccc : regular
+* e6e6e6 : higlight
+
 */
 
 #define DEFAULT_CURRENT_BG_COL (COLORREF)-1
@@ -58,11 +63,20 @@ TODO: make colors match IE Edge instead of iTerm2.
 #define TAB_COLOR_BG      COLOR_BTNFACE
 #define TAB_COLOR_TEXT    COLOR_BTNTEXT
 
+#if 0
 #define TAB_COL_BG_SELECTED_WIN_INACTIVE RGB(0xf6, 0xf6, 0xf6)
 #define TAB_COL_BG_SELECTED              RGB(0xd3, 0xd3, 0xd3)
 #define TAB_COL_BG_NON_SELECTED          RGB(0xc4, 0xc4, 0xc4)
 #define TAB_COL_BG_HIGHLIGHT             RGB(0xab, 0xab, 0xab)
+#endif
+
+#define TAB_COL_BG_SELECTED_WIN_INACTIVE RGB(0xcc, 0xcc, 0xcc)
+#define TAB_COL_BG_SELECTED              RGB(0xf2, 0xf2, 0xf2)
+#define TAB_COL_BG_NON_SELECTED          RGB(0xcc, 0xcc, 0xcc)
+#define TAB_COL_BG_HIGHLIGHT             RGB(0xe6, 0xe6, 0xe6)
+
 #define TAB_COL_TXT                      RGB(0, 0, 0)
+#define TAB_COL_TXT_NON_SELECTED         RGB(0x52, 0x52, 0x52)
 
 #define TABBAR_HEIGHT    24
 #define MIN_TAB_WIDTH   100
@@ -139,7 +153,10 @@ public:
     DragInfo di;
     COLORREF currBgCol;
     struct {
-        COLORREF bg, hoverBg, selectedBg, outline, bar, text, closeHighlight, closeClick, closeLine;
+        COLORREF bg, hoverBg;
+        COLORREF selectedBg, outline;
+        COLORREF bar, text, selectedText, closeHighlight;
+        COLORREF closeClick, closeLine;
     } colors;
 
     TabsControl(HWND wnd, SizeI tabSize) :
@@ -351,21 +368,22 @@ void TabsControl::Paint(HDC hdc, RECT &rc) {
             continue;
         }
 
+        COLORREF textCol = colors.text;
         COLORREF bgCol = colors.bg;;
         if (selectedIdx == i) {
             bgCol = colors.selectedBg;
+            textCol = colors.selectedText;
         } else if (hoverIdx == i) {
             bgCol = colors.hoverBg;
         }
 
-        // ensure contrast between text and background color
-        // TODO: adjust threshold (and try adjusting both current/background tabs)
-        COLORREF textCol = colors.text;
+#if 0
         float bgLight = GetLightness(bgCol), textLight = GetLightness(textCol);
         if (textLight < bgLight ? bgLight < 0x70 : bgLight > 0x90)
             textCol = textLight ? AdjustLightness(textCol, 255.0f / textLight - 1.0f) : RGB(255, 255, 255);
         if (fabs(textLight - bgLight) < 0x40)
             textCol = bgLight < 0x80 ? RGB(255, 255, 255) : RGB(0, 0, 0);
+#endif
 
         // paint tab's body
         gfx.SetCompositingMode(CompositingModeSourceCopy);
@@ -415,7 +433,7 @@ void TabsControl::SetColors(bool force) {
 #endif
 
     bg = TAB_COL_BG_NON_SELECTED;
-    txt = TAB_COL_TXT;
+    txt = TAB_COL_TXT_NON_SELECTED;
 
     // TODO: change bg if window inactive
     WindowInfo *win = FindWindowInfoByHwnd(hwnd);
@@ -430,12 +448,15 @@ void TabsControl::SetColors(bool force) {
 
     colors.bar = bg;
     colors.text = txt;
+    colors.selectedText = TAB_COL_TXT;
 
     int sign = GetLightness(colors.text) > GetLightness(colors.bar) ? -1 : 1;
 
+    // TODO: remove adjustments
     colors.selectedBg = AdjustLightness2(colors.bar, sign * 25.0f);
     colors.hoverBg = AdjustLightness2(colors.bar, sign * 15.0f);
     colors.bg = AdjustLightness2(colors.bar, -sign * 15.0f);
+
     colors.outline = AdjustLightness2(colors.bar, -sign * 60.0f);
     colors.closeLine = COL_CLOSE_X_HOVER;
     colors.closeHighlight = COL_CLOSE_HOVER_BG;
@@ -443,6 +464,7 @@ void TabsControl::SetColors(bool force) {
     if (currBgCol != DEFAULT_CURRENT_BG_COL) {
         colors.selectedBg = currBgCol;
     }
+    colors.bg = TAB_COL_BG_NON_SELECTED;
     colors.selectedBg = TAB_COL_BG_SELECTED;
     colors.hoverBg = TAB_COL_BG_HIGHLIGHT;
 }
@@ -703,6 +725,9 @@ static void OnLButtonUp(TabsControl* tabs) {
     }
 
     if (!isDragging) {
+        if (di.win && di.tabIdx != tabs->selectedIdx) {
+            TabsSelectTab(di.win, di.tabIdx);
+        }
         return;
     }
 

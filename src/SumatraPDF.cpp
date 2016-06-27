@@ -3582,7 +3582,7 @@ static bool FrameOnSysChar(WindowInfo& win, WPARAM key)
 {
     // use Alt+1 to Alt+8 for selecting the first 8 tabs and Alt+9 for the last tab
     int tabIdx = (int)(key - '1');
-    if (win.tabsVisible && (0 <= tabIdx && tabId <= 8)) {
+    if (win.tabsVisible && (0 <= tabIdx && tabIdx <= 8)) {
         if (tabIdx == 8) {
             tabIdx = (int)win.tabs.Count() - 1;
         }
