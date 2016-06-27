@@ -12,7 +12,7 @@ void CloseAndRemoveDocInCurrentTab(WindowInfo *win);
 void DestroyTabs(WindowInfo *win);
 void TabsOnChangedDoc(WindowInfo *win);
 LRESULT TabsOnNotify(WindowInfo *win, LPARAM lparam);
-void TabsSelect(WindowInfo *win, int tabIndex);
+void TabsSelectTab(WindowInfo *win, int tabIndex);
 void TabsOnCtrlTab(WindowInfo *win, bool reverse);
 // also shows/hides the tabbar when necessary
 void UpdateTabWidth(WindowInfo *win);

@@ -762,7 +762,7 @@ int APIENTRY WinMain(_In_ HINSTANCE hInstance, _In_opt_ HINSTANCE hPrevInstance,
             for (TabState *state : *data->tabStates) {
                 RestoreTabOnStartup(win, state);
             }
-            TabsSelect(win, data->tabIndex - 1);
+            TabsSelectTab(win, data->tabIndex - 1);
         }
     }
     ResetSessionState(gGlobalPrefs->sessionData);

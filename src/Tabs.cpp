@@ -40,12 +40,29 @@ Our visual behavior during dragging is closer to IE Edge than Chrome,
 due to implementation simplicity. Mostly, we don't try to preview the
 final state at all costs. When dragged out we only show the tab, not
 the content.
+
+Potential tab colors, like in iTerm2.
+
+Background color:
+* #f6f6f6 : inactive window, active tab, very light gray
+* #d3d3d3 : active window, active tab, ligth gray
+* #c4c4c4 : color of non-active tab, dark gray
+* #abaaab : color of non-active, highlighted, darker gray
+
+TODO: make colors match IE Edge instead of iTerm2.
+
 */
 
 #define DEFAULT_CURRENT_BG_COL (COLORREF)-1
 
 #define TAB_COLOR_BG      COLOR_BTNFACE
 #define TAB_COLOR_TEXT    COLOR_BTNTEXT
+
+#define TAB_COL_BG_SELECTED_WIN_INACTIVE RGB(0xf6, 0xf6, 0xf6)
+#define TAB_COL_BG_SELECTED              RGB(0xd3, 0xd3, 0xd3)
+#define TAB_COL_BG_NON_SELECTED          RGB(0xc4, 0xc4, 0xc4)
+#define TAB_COL_BG_HIGHLIGHT             RGB(0xab, 0xab, 0xab)
+#define TAB_COL_TXT                      RGB(0, 0, 0)
 
 #define TABBAR_HEIGHT    24
 #define MIN_TAB_WIDTH   100
@@ -131,7 +148,7 @@ public:
         inTitlebar(false), currBgCol(DEFAULT_CURRENT_BG_COL) {
         ZeroMemory(&colors, sizeof(colors));
         Reshape(tabSize.dx, tabSize.dy);
-        EvaluateColors(false);
+        SetColors(false);
     }
 
     ~TabsControl() {
@@ -142,7 +159,7 @@ public:
     bool Reshape(int dx, int dy);
     int IndexFromPoint(int x, int y, bool *overClose);
     void Paint(HDC hdc, RECT &rc);
-    void EvaluateColors(bool force);
+    void SetColors(bool force);
 
     int Count() {
         return (int) tabTitles.Count();
@@ -382,8 +399,9 @@ void TabsControl::Paint(HDC hdc, RECT &rc) {
 }
 
 // Evaluates the colors for the tab's elements.
-void TabsControl::EvaluateColors(bool force) {
+void TabsControl::SetColors(bool force) {
     COLORREF bg, txt;
+#if 0
     if (inTitlebar) {
         WindowInfo *win = FindWindowInfoByHwnd(hwnd);
         bg = win->caption->bgColor;
@@ -392,6 +410,21 @@ void TabsControl::EvaluateColors(bool force) {
         bg = GetSysColor(TAB_COLOR_BG);
         txt = GetSysColor(TAB_COLOR_TEXT);
     }
+    if (!force && bg == colors.bar && txt == colors.text)
+        return;
+#endif
+
+    bg = TAB_COL_BG_NON_SELECTED;
+    txt = TAB_COL_TXT;
+
+    // TODO: change bg if window inactive
+    WindowInfo *win = FindWindowInfoByHwnd(hwnd);
+    HWND activeHwnd = GetActiveWindow();
+    WindowInfo *win2 = FindWindowInfoByHwnd(activeHwnd);
+    if (win != win2) {
+        bg = TAB_COL_BG_SELECTED_WIN_INACTIVE;
+    }
+
     if (!force && bg == colors.bar && txt == colors.text)
         return;
 
@@ -410,6 +443,8 @@ void TabsControl::EvaluateColors(bool force) {
     if (currBgCol != DEFAULT_CURRENT_BG_COL) {
         colors.selectedBg = currBgCol;
     }
+    colors.selectedBg = TAB_COL_BG_SELECTED;
+    colors.hoverBg = TAB_COL_BG_HIGHLIGHT;
 }
 
 static void RemoveTab(WindowInfo *win, int idx) {
@@ -488,7 +523,7 @@ static void OnWmPaint(TabsControl *tabs) {
     GetUpdateRect(hwnd, &rc, FALSE);
     HDC hdc = BeginPaint(hwnd, &ps);
     DoubleBuffer buffer(hwnd, RectI::FromRECT(rc));
-    tabs->EvaluateColors(false);
+    tabs->SetColors(false);
     tabs->Paint(buffer.GetDC(), rc);
     buffer.Flush(hdc);
     ValidateRect(hwnd, nullptr);
@@ -777,6 +812,14 @@ static LRESULT CALLBACK WndProcTabBar(HWND hwnd, UINT msg, WPARAM wParam, LPARAM
         OnMouseMove(tabs, GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
         return 0;
 
+#if 0 // TODO: doesn't get triggered
+    case WM_NCACTIVATE:
+    case WM_ACTIVATE:
+        plogf("tabs WM_ACTIVATE");
+        tabs->Invalidate();
+        return 0;
+#endif
+
     case WM_LBUTTONDOWN:
         OnLButtonDown(tabs, GET_X_LPARAM(lParam), GET_Y_LPARAM(lParam));
         return 0;
@@ -785,8 +828,7 @@ static LRESULT CALLBACK WndProcTabBar(HWND hwnd, UINT msg, WPARAM wParam, LPARAM
         OnLButtonUp(tabs);
         return 0;
 
-
-#if 0 // Note: I don't even know how to trigger this with my mouse-----------------
+#if 0 // Note: I don't even know how to trigger this with my mouse
     case WM_MBUTTONDOWN:
         // middle-clicking unconditionally closes the tab
         {
@@ -905,7 +947,7 @@ void UpdateCurrentTabBgColor(WindowInfo *win)
         // TODO: match either the toolbar (if shown) or background
         tabs->currBgCol = DEFAULT_CURRENT_BG_COL;
     }
-    tabs->EvaluateColors(true);
+    tabs->SetColors(true);
     RepaintNow(win->hwndTabBar);
 }
 
@@ -1020,8 +1062,7 @@ void UpdateTabWidth(WindowInfo *win)
         if (tabSize.dx > (rect.dx - 3) / count)
             tabSize.dx = (rect.dx - 3) / count;
         TabCtrl_SetItemSize(win->hwndTabBar, tabSize.dx, tabSize.dy);
-    }
-    else {
+    } else {
         ShowTabBar(win, false);
     }
 }
@@ -1053,7 +1094,7 @@ void SetTabsInTitlebar(WindowInfo *win, bool set)
 }
 
 // Selects the given tab (0-based index).
-void TabsSelect(WindowInfo *win, int tabIndex)
+void TabsSelectTab(WindowInfo *win, int tabIndex)
 {
     int count = (int)win->tabs.Count();
     if (count < 2 || tabIndex < 0 || tabIndex >= count)
@@ -1077,7 +1118,7 @@ void TabsOnCtrlTab(WindowInfo *win, bool reverse)
         return;
 
     int next = (TabCtrl_GetCurSel(win->hwndTabBar) + (reverse ? -1 : 1) + count) % count;
-    TabsSelect(win, next);
+    TabsSelectTab(win, next);
 }
 
 // Adjusts lightness by 1/255 units.

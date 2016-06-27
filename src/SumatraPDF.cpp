@@ -355,7 +355,7 @@ WindowInfo* FindWindowInfoByFile(const WCHAR *file, bool focusTab)
             // bring a background tab to the foreground
             for (TabInfo *tab : win->tabs) {
                 if (tab != win->currentTab && path::IsSame(tab->filePath, normFile)) {
-                    TabsSelect(win, win->tabs.Find(tab));
+                    TabsSelectTab(win, win->tabs.Find(tab));
                     return win;
                 }
             }
@@ -379,7 +379,7 @@ WindowInfo* FindWindowInfoBySyncFile(const WCHAR *file, bool focusTab)
             for (TabInfo *tab : win->tabs) {
                 if (tab != win->currentTab && tab->AsFixed() && tab->AsFixed()->pdfSync &&
                     tab->AsFixed()->pdfSync->SourceToDoc(file, 0, 0, &page, rects) != PDFSYNCERR_UNKNOWN_SOURCEFILE) {
-                    TabsSelect(win, win->tabs.Find(tab));
+                    TabsSelectTab(win, win->tabs.Find(tab));
                     return win;
                 }
             }
@@ -3581,8 +3581,12 @@ static void FrameOnChar(WindowInfo& win, WPARAM key, LPARAM info=0)
 static bool FrameOnSysChar(WindowInfo& win, WPARAM key)
 {
     // use Alt+1 to Alt+8 for selecting the first 8 tabs and Alt+9 for the last tab
-    if (win.tabsVisible && ('1' <= key && key <= '9')) {
-        TabsSelect(&win, key < '9' ? (int)(key - '1') : (int)win.tabs.Count() - 1);
+    int tabIdx = (int)(key - '1');
+    if (win.tabsVisible && (0 <= tabIdx && tabId <= 8)) {
+        if (tabIdx == 8) {
+            tabIdx = (int)win.tabs.Count() - 1;
+        }
+        TabsSelectTab(&win, tabIdx);
         return true;
     }
 
