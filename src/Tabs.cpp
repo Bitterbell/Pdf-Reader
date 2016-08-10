@@ -138,6 +138,7 @@ public:
     int selectedIdx;
     int hoverIdx;
     int nextTab;
+    bool trackingForMouseLeave;
     bool inTitlebar;
     TabDragInfo dragInfo;
     COLORREF currBgCol;
@@ -151,6 +152,7 @@ public:
     TabsControl(HWND wnd, SizeI tabSize) :
         hwnd(wnd), path(nullptr), width(0), height(0),
         selectedIdx(-1), hoverIdx(-1), nextTab(-1),
+        trackingForMouseLeave(false),
         inTitlebar(false), currBgCol(DEFAULT_CURRENT_BG_COL) {
         ZeroMemory(&colors, sizeof(colors));
         Reshape(tabSize.dx, tabSize.dy);
@@ -627,32 +629,45 @@ static void OnLButtonDown(TabsControl *tabs, int x, int y) {
     SetCapture(hwnd);
 }
 
+static void OnMouseLeave(TabsControl *tabs) {
+    //plogf("OnMouseLeave()");
+    tabs->trackingForMouseLeave = false;
+    tabs->hoverIdx = -1;
+    tabs->Invalidate();
+}
+
 static void OnMouseMove(TabsControl *tabs, int x, int y) {
     HWND hwnd = tabs->hwnd;
-    bool isDragging = IsDragging(tabs->hwnd);
-    if (!isDragging) {
-        plogf("OnMouseMove: not dragging");
-        tabs->Invalidate();
-        return;
-    }
-    TabDragInfo di;
-    TabDragInfoFromCursorPos(di);
-    if (gPrevMouseMoveWin != di.win) {
-        plogf("OnMouseMove: WindowInfo: %p", di.win);
-        gPrevMouseMoveWin = di.win;
-    }
 
-#if 0
-    if (!tabs->isMouseInClientArea) {
-        // Track the mouse for leaving the client area.
+    TabDragInfo dragInfo;
+    TabDragInfoFromCursorPos(dragInfo);
+
+    if (!tabs->trackingForMouseLeave) {
+        // register to get WM_MOUSELEAVE messages
         TRACKMOUSEEVENT tme = { 0 };
         tme.cbSize = sizeof(TRACKMOUSEEVENT);
         tme.dwFlags = TME_LEAVE;
         tme.hwndTrack = tabs->hwnd;
-        if (TrackMouseEvent(&tme))
-            tabs->isMouseInClientArea = true;
+        if (TrackMouseEvent(&tme)) {
+            tabs->trackingForMouseLeave = true;
+        }
     }
-#endif
+
+    bool isDragging = IsDragging(tabs->hwnd);
+    if (!isDragging) {
+        if (dragInfo.tabIdx == tabs->selectedIdx) {
+            tabs->hoverIdx = -1;
+        } else {
+            tabs->hoverIdx = dragInfo.tabIdx;
+        }
+        plogf("OnMouseMove: not dragging, tab: %d", (int)dragInfo.tabIdx);
+        tabs->Invalidate();
+        return;
+    }
+    if (gPrevMouseMoveWin != dragInfo.win) {
+        plogf("OnMouseMove: WindowInfo: %p", dragInfo.win);
+        gPrevMouseMoveWin = dragInfo.win;
+    }
 
     bool overClose = false;
     int hl = tabs->IndexFromPoint(x, y, &overClose);
@@ -815,7 +830,7 @@ static LRESULT CALLBACK WndProcTabBar(HWND hwnd, UINT msg, WPARAM wParam, LPARAM
         return HTTRANSPARENT;
 
     case WM_MOUSELEAVE:
-        PostMessage(hwnd, WM_MOUSEMOVE, 0xFF, 0);
+        OnMouseLeave(tabs);
         return 0;
 
     case WM_MOUSEMOVE:
