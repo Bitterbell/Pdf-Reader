@@ -128,17 +128,6 @@ void TabDragInfo::Reset() {
     isOverClose = false;
 }
 
-struct DragInfo {
-    // for the point that initiated drag
-    TabDragInfo start;
-    // for the last mouse position
-    TabDragInfo last;
-    DragInfo();
-};
-
-DragInfo::DragInfo() {
-}
-
 class TabsControl
 {
     WStrVec tabTitles;
@@ -150,7 +139,7 @@ public:
     int hoverIdx;
     int nextTab;
     bool inTitlebar;
-    DragInfo di;
+    TabDragInfo dragInfo;
     COLORREF currBgCol;
     struct {
         COLORREF bg, hoverBg;
@@ -601,15 +590,12 @@ static WindowInfo* gPrevMouseMoveWin;
 
 static void OnLButtonDown(TabsControl *tabs, int x, int y) {
     HWND hwnd = tabs->hwnd;
-    TabDragInfo di;
-    TabDragInfoFromCursorPos(di);
-    if (di.tabIdx == -1) {
+    TabDragInfoFromCursorPos(tabs->dragInfo);
+    if (tabs->dragInfo.tabIdx == -1) {
         plogf("OnLButtonDown: no tab under x: %d, y: %d", x, y);
         // TODO: is this possible? If we got this message, it should have been over a tab bar
         return;
     }
-
-    tabs->di.start = di;
 
 #if 0
     tabs->di.cursorOverTab = true;
@@ -624,11 +610,11 @@ static void OnLButtonDown(TabsControl *tabs, int x, int y) {
     CrashIf(win != win2);
     tabs->di.winStart = win;
 #endif
-    plogf("OnLButtonDown: WindowInfo: %p", tabs->di.start.win);
+    plogf("OnLButtonDown: WindowInfo: %p, overClose: %d", tabs->dragInfo.win, tabs->dragInfo.isOverClose);
     gPrevMouseMoveWin = nullptr;
-    if (di.isOverClose) {
-        plogf("  over close");
+    if (tabs->dragInfo.isOverClose) {
         tabs->Invalidate();
+        // uitask::Post([=] { TabNotification(win, T_CLOSING, next, -1); }); ???
         return;
     }
 
@@ -645,6 +631,7 @@ static void OnMouseMove(TabsControl *tabs, int x, int y) {
     HWND hwnd = tabs->hwnd;
     bool isDragging = IsDragging(tabs->hwnd);
     if (!isDragging) {
+        plogf("OnMouseMove: not dragging");
         tabs->Invalidate();
         return;
     }
@@ -711,28 +698,26 @@ static void OnLButtonUp(TabsControl* tabs) {
     TabDragInfoFromCursorPos(di);
 
     bool isDragging = IsDragging(hwnd);
+    plogf("OnLButtonUp: WindowInfo: %p, isDragging=%d", di.win, (int)isDragging);
     if (isDragging) {
         ReleaseCapture();
     }
-    plogf("OnLButtonUp: WindowInfo: %p, isDragging=%d", di.win, (int)isDragging);
 
-    if (di.win == tabs->di.start.win) {
-        if ((di.isOverClose && tabs->di.start.isOverClose) &&
-        (di.tabIdx == tabs->di.start.tabIdx)) {
+    if (di.win == tabs->dragInfo.win) {
+        if ((di.isOverClose && tabs->dragInfo.isOverClose) &&
+        (di.tabIdx == tabs->dragInfo.tabIdx)) {
             CloseOrRemoveTab(di.win, di.tabIdx);
+            return;
+        }
+        if (di.tabIdx != tabs->selectedIdx) {
+            TabsSelectTab(di.win, di.tabIdx);
             return;
         }
     }
 
-    if (!isDragging) {
-        if (di.win && di.tabIdx != tabs->selectedIdx) {
-            TabsSelectTab(di.win, di.tabIdx);
-        }
-        return;
-    }
 
-    if (di.win != tabs->di.start.win) {
-        MoveTabsBetweenWindows(di.win, tabs->di.start.win, tabs->di.start.tabIdx);
+    if (di.win != tabs->dragInfo.win) {
+        MoveTabsBetweenWindows(di.win, tabs->dragInfo.win, tabs->dragInfo.tabIdx);
         return;
     }
 
